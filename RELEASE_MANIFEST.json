@@ -1,0 +1,79 @@
+{
+ "app": "meus-plantoes",
+ "version": "1.0.0+81d8c7fba4",
+ "built_at": "2026-10-26T11:37:50.253904+00:00",
+ "source_commit": "b4e01618c64e64c086087b030fa70791a56891b3",
+ "source_repo": "M:/VKS-DATA/LAB/plantoes-pessoais-20261020 (git local, pasta app/)",
+ "public_files": {
+  "index.html": {
+   "sha256": "a2b8f8db402886db1ce6ee818cd643e4107b13c624d2eada16a18d9e1259a30c",
+   "bytes": 1521
+  },
+  "styles.css": {
+   "sha256": "5d45e0fad19b9b71b1d422029de4d037be8aaae71cd6eef0cb66c362bfbd1fa5",
+   "bytes": 27979
+  },
+  "sw.js": {
+   "sha256": "f1ea5e045473526ac2c21874e9a1f364a0b99e9c89010934d009d8f55180263f",
+   "bytes": 1761
+  },
+  "manifest.webmanifest": {
+   "sha256": "73d7ec3548d22c181124845dcae448719243fc24b490ee6ca2d110f82fbd15f0",
+   "bytes": 589
+  },
+  "sample.js": {
+   "sha256": "4912d0815b2a69e8f2845d46c9777a6848384e8f652f2ddbf5798f208bdcd8bc",
+   "bytes": 25006
+  },
+  "README.md": {
+   "sha256": "df3dbdb824ed6be5c7b64853aa3a9f30a31534fc584fe53ef4816198fd224d60",
+   "bytes": 3743
+  },
+  "src/app.js": {
+   "sha256": "bf55b715f892e3fe4caf7dd733dcaff835981710609670dac870a1f972196c38",
+   "bytes": 107152
+  },
+  "src/core.js": {
+   "sha256": "76bfc80213b7fe2d6eafed61b2abcb20a2fdd2c61e9026aa0dc36d05323ef8af",
+   "bytes": 15291
+  },
+  "src/store.js": {
+   "sha256": "eb21f2620d462126ae37f9d359881e463f4bf6c944ed2f243f61847b4420aa79",
+   "bytes": 6773
+  },
+  "src/codecs.js": {
+   "sha256": "b1729d0e04c8edf47522aa63a4897571028e06ff61ebf3302bfbf13e88d1becb",
+   "bytes": 22655
+  },
+  "src/version.js": {
+   "sha256": "28d43276bac824fddabe5bae8da7564ce458b898dcfea21222b4f99e1bb587ef",
+   "bytes": 104
+  },
+  "icons/icon-192.png": {
+   "sha256": "9847537ac4ef24df572d1210cd2e8ee41c9eacbaa9d0d1f83319317060efe44f",
+   "bytes": 5852
+  },
+  "icons/icon-512.png": {
+   "sha256": "25615043616d9378251c41c02112e9497eb2e7a96d8cb9c617a0e31b35b568f7",
+   "bytes": 15755
+  },
+  "icons/maskable-512.png": {
+   "sha256": "31fb36bf618f838087b567a7f01f6fe395efe573eed972ce3896212a2e9a062d",
+   "bytes": 9188
+  },
+  "icons/apple-touch-icon.png": {
+   "sha256": "6df936f712c52c1f0fd07c4fdf0225efeb4c6760bb11dbfa975e21b70b5bd3f1",
+   "bytes": 5547
+  },
+  "fonts/inter-var.woff2": {
+   "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+   "bytes": 48256
+  }
+ },
+ "tree_sha256": "eeae564fdfc3a2f9b8c03efe9f9fa79dce0ce6a1eb735e5592333d7dd9f5f28e",
+ "notes": [
+  "somente arquivos públicos do app; nenhum teste, ferramenta, dado real ou segredo",
+  "sample.js = dados fictícios opcionais (Carregar dados de exemplo)",
+  "CSP default-src 'self'; nenhuma requisição externa"
+ ]
+}
