@@ -40,7 +40,7 @@ node test/e2e.mjs
 
 Unitários (`node:test`, 26 casos): datas, centavos, previsão, coortes, recorrência, validação estrita, fila de gravação (atrasos,
 inversão, falha, conflito com outra aba), codecs CSV/ICS/backup, conflitos de importação, migração. E2E (Playwright Chromium,
-`PW_PATH` apontando para o pacote `playwright`, 22 cenários): o próprio servidor local é iniciado; cobre primeiro uso,
+`PW_PATH` apontando para o pacote `playwright`, 23 cenários): o próprio servidor local é iniciado; cobre primeiro uso,
 persistência entre reinícios, lixeira, escopos de série, exportar/importar reais (CSV, ICS sem/com valores, backup), conflitos
 de importação, falha de gravação, restauração abortada, duas abas concorrentes, offline, atualização N→N+1 com duas abas,
 semana na segunda, 320/430 px, modelos, assets/manifesto/service worker, totais financeiros após mutações e plantão noturno na

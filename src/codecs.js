@@ -1,7 +1,7 @@
 /* codecs.js — portabilidade do Meus Plantões (SPEC §3): CSV da escala (formato documentado do Plantãozinho), CSV com ganhos,
    ICS (exportar/importar), backup JSON verificado por SHA-256. Funções puras sobre o conjunto {places, templates, series, shifts};
    nada aqui grava — a prévia decide e o app aplica. Testado em node:test. */
-import { OFFSET, OFFSET_MIN, TZ, isDateKey, isTimeHM, isIsoLocal, minutesOf, parseDecimalCents, decimalTxt, ruleTxtFor, dm, dmy, brl, normTitle, dupKeyCsv, dupKeyIcs, uid, validateDataset, SCHEMA_VERSION, pad } from './core.js';
+import { OFFSET, OFFSET_MIN, TZ, isDateKey, isTimeHM, isIsoLocal, minutesOf, parseDecimalCents, decimalTxt, safeCents, ruleTxtFor, dm, dmy, brl, normTitle, dupKeyCsv, dupKeyIcs, uid, validateDataset, SCHEMA_VERSION, pad } from './core.js';
 
 /* ---------- CSV ---------- */
 /* M4: células de texto que começam com = + - @ (ou tab/CR) ganham apóstrofo — planilhas não as executam como fórmula */
@@ -75,7 +75,7 @@ export function csvPreview(text, data, opts) {
   if (need.length) return { error: `cabeçalho sem coluna: ${need.join(', ')}`, valid: [], invalid: [], dup: [], newPlaces: [], header: rows[0] };
   const byName = new Map(data.places.map(p => [normTitle(p.name), p])); const byShort = new Map(data.places.map(p => [normTitle(p.short), p]));
   const existing = new Set(data.shifts.map(dupKeyCsv)), seen = new Set(), valid = [], invalid = [], dup = [], conflicts = [], newPlaces = new Map();
-  const key3 = s => `${s.start}|${s.end}|${s.place}`, byKey3 = new Map(data.shifts.map(s => [key3(s), s])); /* conflito = mesmo plantão (início, fim, local) com conteúdo diferente */
+  const key3 = s => `${s.start}|${s.end}|${s.place}`, byKey3 = new Map(data.shifts.map(s => [key3(s), s])), seen3 = new Map(); /* conflito = mesmo plantão (início, fim, local) com conteúdo diferente */
   rows.slice(1).forEach((r, i) => {
     const line = i + 2, cell = k => col[k] == null ? '' : (r[col[k]] ?? '').trim();
     const start = parseWhen(cell('start')), end = parseWhen(cell('end')), cents = parseDecimalCents(cell('value'));
@@ -93,6 +93,7 @@ export function csvPreview(text, data, opts) {
     if (ex) { if (!isDateKey(ex)) { if (isNew) { const np = newPlaces.get(normTitle(placeName)); if (np && --np.count === 0) newPlaces.delete(normTitle(placeName)); } return invalid.push({ line, reason: `previsão inválida: "${ex}"` }); } s.expected_on = ex; }
     const key = dupKeyCsv(s); if (existing.has(key) || seen.has(key)) return dup.push({ line, title, start }); seen.add(key);
     const ex0 = byKey3.get(key3(s)); if (ex0) { const changes = conflictChanges(ex0, s); if (changes.length) return conflicts.push({ line, title, start, existingId: ex0.id, changes, incoming: s }); return dup.push({ line, title, start }); }
+    const inFile = seen3.get(key3(s)); if (inFile) return invalid.push({ line, reason: `repete a linha ${inFile} (mesmo início, fim e local) com conteúdo diferente` }); seen3.set(key3(s), line); /* H1: dentro do arquivo, o mesmo plantão com outro valor/título não entra duas vezes */
     valid.push(s);
   });
   return { valid, invalid, dup, conflicts, newPlaces: [...newPlaces.values()], header: rows[0], total: rows.length - 1 };
@@ -101,7 +102,7 @@ export function csvPreview(text, data, opts) {
 /* diferenças materiais entre o plantão existente e o importado (valor, título, horário, local, observação) */
 export function conflictChanges(ex, inc) {
   const ch = [];
-  if (inc.amount_cents > 0 && inc.amount_cents !== ex.amount_cents) ch.push({ field: 'valor', from: ex.amount_cents, to: inc.amount_cents, money: true });
+  if (safeCents(inc.amount_cents) > 0 && inc.amount_cents !== ex.amount_cents) ch.push({ field: 'valor', from: ex.amount_cents, to: inc.amount_cents, money: true });
   if (normTitle(inc.title) !== normTitle(ex.title)) ch.push({ field: 'título', from: ex.title, to: inc.title });
   if (inc.start !== ex.start || inc.end !== ex.end) ch.push({ field: 'horário', from: `${ex.start.slice(11, 16)}–${ex.end.slice(11, 16)}`, to: `${inc.start.slice(11, 16)}–${inc.end.slice(11, 16)}` });
   if (inc.place && inc.place !== ex.place && !String(inc.place).startsWith('new:')) ch.push({ field: 'local', from: ex.place, to: inc.place });
@@ -111,12 +112,12 @@ export function conflictChanges(ex, inc) {
 /* aplica um conflito escolhido como "substituir pelo arquivo": nunca toca em paid_at (recebimento é decisão local) */
 export function applyConflict(ex, inc, now) {
   Object.assign(ex, { title: inc.title, start: inc.start, end: inc.end, minutes: inc.minutes, updated_at: now });
-  if (inc.amount_cents > 0) ex.amount_cents = inc.amount_cents; if (inc.note) ex.note = inc.note; if (inc.place && !String(inc.place).startsWith('new:')) ex.place = inc.place; if (inc.expected_on) ex.expected_on = inc.expected_on; if (inc.ext_uid && !ex.ext_uid) ex.ext_uid = inc.ext_uid;
+  if (safeCents(inc.amount_cents) > 0) ex.amount_cents = inc.amount_cents; if (inc.note) ex.note = inc.note; if (inc.place && !String(inc.place).startsWith('new:')) ex.place = inc.place; if (inc.expected_on) ex.expected_on = inc.expected_on; if (inc.ext_uid && !ex.ext_uid) ex.ext_uid = inc.ext_uid;
 }
 /* ---------- ICS ---------- */
 const icsEsc = v => String(v ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const icsUnesc = v => String(v ?? '').replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\');
-const fold = line => { const out = []; let s = line; while (byteLen(s) > 75) { let cut = 75; while (byteLen(s.slice(0, cut)) > 75) cut--; out.push(s.slice(0, cut)); s = ' ' + s.slice(cut); } out.push(s); return out.join('\r\n'); };
+const fold = line => { const out = []; let cps = Array.from(line); while (byteLen(cps.join('')) > 75) { let cut = Math.min(cps.length, 75); while (byteLen(cps.slice(0, cut).join('')) > 75) cut--; out.push(cps.slice(0, cut).join('')); cps = [' ', ...cps.slice(cut)]; } out.push(cps.join('')); return out.join('\r\n'); }; /* M1: corta entre pontos de código */
 const byteLen = s => new TextEncoder().encode(s).length;
 export const isoToUtcStamp = iso => { const d = new Date(Date.parse(iso)); return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`; };
 /* opts.values: true = inclui valor, previsão e recebimento (DESCRIPTION + X-MP-*); false = agenda limpa (só horário, título, local e observação) */
@@ -166,7 +167,7 @@ export function icsPreview(text, data) {
     if (!placeName) return invalid.push({ line: n, reason: 'sem local (LOCATION)' });
     let place = byName.get(normTitle(placeName)) || byShort.get(normTitle(placeName)), placeId = place?.id, isNew = false;
     if (!place) { isNew = true; const np = newPlaces.get(normTitle(placeName)) || { name: placeName, count: 0, tempId: `new:${normTitle(placeName)}` }; np.count++; newPlaces.set(normTitle(placeName), np); placeId = np.tempId; }
-    const centsRaw = g('X-MP-AMOUNT-CENTS'); const cents = /^\d+$/.test(centsRaw) ? +centsRaw : 0;
+    const centsRaw = g('X-MP-AMOUNT-CENTS'); const cents = /^\d{1,10}$/.test(centsRaw) ? (safeCents(+centsRaw) ?? 0) : 0; /* B1: inteiro seguro dentro do teto; fora disso = sem valor */
     const s = { id: uid(), ext_uid: uidRaw || null, title, place: placeId, start: st.iso, end: en.iso, minutes: minutesOf(st.iso, en.iso), amount_cents: cents, note: cents || own ? '' : (g('DESCRIPTION') ? g('DESCRIPTION').slice(0, 200) : '') /* DESCRIPTION vira observação só em evento externo sem valor; o nosso já existe aqui */, paid_at: isDateKey(g('X-MP-PAID')) ? g('X-MP-PAID') : null, expected_on: isDateKey(g('X-MP-EXPECTED')) ? g('X-MP-EXPECTED') : null, line: n, newPlace: isNew ? placeName : null, noAmount: !cents, tzUnknown: st.tzUnknown || en.tzUnknown || null };
     /* identidade (SPEC §3): UID nosso → id; UID externo → ext_uid; sem UID → chave normalizada sem valor */
     const match = own && ownIds.has(own[1]) ? byIdMap.get(own[1]) : (uidRaw && extUids.has(uidRaw) ? byExt.get(uidRaw) : null);

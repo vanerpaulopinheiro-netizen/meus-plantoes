@@ -1,8 +1,8 @@
 {
  "app": "meus-plantoes",
- "version": "1.0.0+81d8c7fba4",
- "built_at": "2026-10-26T11:37:50.253904+00:00",
- "source_commit": "b4e01618c64e64c086087b030fa70791a56891b3",
+ "version": "1.0.0+7b046b3b8e",
+ "built_at": "2026-10-26T19:04:57.899415+00:00",
+ "source_commit": "11e4006daeeb4295120fe0c6d69fe589d33591cd",
  "source_repo": "M:/VKS-DATA/LAB/plantoes-pessoais-20261020 (git local, pasta app/)",
  "public_files": {
   "index.html": {
@@ -14,7 +14,7 @@
    "bytes": 27979
   },
   "sw.js": {
-   "sha256": "f1ea5e045473526ac2c21874e9a1f364a0b99e9c89010934d009d8f55180263f",
+   "sha256": "335f61f9b77ffe1c3af27a3da6f797e6c4b2e4a678abf9eddde67e20969494e1",
    "bytes": 1761
   },
   "manifest.webmanifest": {
@@ -26,27 +26,27 @@
    "bytes": 25006
   },
   "README.md": {
-   "sha256": "df3dbdb824ed6be5c7b64853aa3a9f30a31534fc584fe53ef4816198fd224d60",
+   "sha256": "8851ac63829c3a30592946784deb850b3423d2b294ea58f3bd9f46e9935beef5",
    "bytes": 3743
   },
   "src/app.js": {
-   "sha256": "bf55b715f892e3fe4caf7dd733dcaff835981710609670dac870a1f972196c38",
-   "bytes": 107152
+   "sha256": "2d65153b1e785c04ff607ef98f87c67173c34c0cc87eac3491d79a38ed575b93",
+   "bytes": 107470
   },
   "src/core.js": {
-   "sha256": "76bfc80213b7fe2d6eafed61b2abcb20a2fdd2c61e9026aa0dc36d05323ef8af",
-   "bytes": 15291
+   "sha256": "e9de8e79c57daa164e7dddc7ea9f1cdb8a7b9f524ddab35ba20bff63e8388b31",
+   "bytes": 15562
   },
   "src/store.js": {
    "sha256": "eb21f2620d462126ae37f9d359881e463f4bf6c944ed2f243f61847b4420aa79",
    "bytes": 6773
   },
   "src/codecs.js": {
-   "sha256": "b1729d0e04c8edf47522aa63a4897571028e06ff61ebf3302bfbf13e88d1becb",
-   "bytes": 22655
+   "sha256": "f1eea1fcd135461a0560726f59f7af487995caf6610ec429fac10aae9485ac82",
+   "bytes": 23211
   },
   "src/version.js": {
-   "sha256": "28d43276bac824fddabe5bae8da7564ce458b898dcfea21222b4f99e1bb587ef",
+   "sha256": "f86281625a32314d54074bc47ca20bcf6207cfda3c9f4e96b9ddbb7dd703e6f9",
    "bytes": 104
   },
   "icons/icon-192.png": {
@@ -70,7 +70,7 @@
    "bytes": 48256
   }
  },
- "tree_sha256": "eeae564fdfc3a2f9b8c03efe9f9fa79dce0ce6a1eb735e5592333d7dd9f5f28e",
+ "tree_sha256": "128b83efd11512f50fb9833bf47fb38d2997a042c2df8b926e00157686508767",
  "notes": [
   "somente arquivos públicos do app; nenhum teste, ferramenta, dado real ou segredo",
   "sample.js = dados fictícios opcionais (Carregar dados de exemplo)",

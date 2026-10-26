@@ -47,13 +47,16 @@ export const minutesOf = (start, end) => Math.round((Date.parse(end) - Date.pars
 export const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 export const brl = c => BRL.format(c / 100);
 export const centsTxt = c => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); /* 1.380,00 */
+/* teto de um plantão: R$ 10 milhões em centavos; acima disso (ou não finito, não inteiro, negativo) o valor é inválido em todos os caminhos */
+export const MAX_CENTS = 1e9;
+export const safeCents = c => Number.isSafeInteger(c) && c >= 0 && c <= MAX_CENTS ? c : null;
 export function parseCents(v) {
-  v = String(v ?? '').trim().replace(/^R\$\s*/, ''); if (!v || !/^[\d.,]+$/.test(v)) return null;
+  v = String(v ?? '').trim().replace(/^R\$\s*/, ''); if (!v || !/^[\d.,]+$/.test(v) || v.length > 20) return null;
   v = v.includes(',') ? v.replace(/\./g, '').replace(',', '.') : /^\d{1,3}(\.\d{3})+$/.test(v) ? v.replace(/\./g, '') : v;
-  const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : null;
+  const n = Number(v); return Number.isFinite(n) ? safeCents(Math.round(n * 100)) : null;
 }
-/* valor decimal com ponto (CSV): "1234.5" → 123450; aceita também vírgula brasileira */
-export function parseDecimalCents(v) { v = String(v ?? '').trim(); if (!v) return null; if (/^-?\d+(\.\d+)?$/.test(v)) return Math.round(Number(v) * 100); return parseCents(v); }
+/* valor decimal com ponto (CSV): "1234.5" → 123450; aceita também vírgula brasileira; nunca devolve não finito/inseguro */
+export function parseDecimalCents(v) { v = String(v ?? '').trim(); if (!v || v.length > 20) return null; if (/^-?\d+(\.\d+)?$/.test(v)) return safeCents(Math.round(Number(v) * 100)); return parseCents(v); }
 export const decimalTxt = c => (c / 100).toFixed(2);
 
 /* ---------- previsão de recebimento (regra do local) ---------- */
@@ -134,19 +137,19 @@ export function validateDataset(d) {
   const uniq = (coll, name) => { const seen = new Set(); for (const r of coll) { if (!r || typeof r !== 'object' || Array.isArray(r)) { push(`${name}: registro inválido`); continue; } if (typeof r.id !== 'string' || !ID_RE.test(r.id)) { push(`${name}: id ausente ou inválido${typeof r.id === 'string' ? ` (${r.id.slice(0, 20)})` : ''}`); continue; } if (seen.has(r.id)) push(`${name}: id duplicado ${r.id}`); seen.add(r.id); } return seen; };
   const P = uniq(d.places, 'locais'), T = uniq(d.templates, 'modelos'), SE = uniq(d.series, 'séries'); uniq(d.shifts, 'plantões');
   for (const p of d.places) { if (typeof p.name !== 'string' || !p.name.trim() || p.name.length > 120) push(`local ${p.id}: nome ausente ou longo demais`); if (typeof p.short !== 'string' || !p.short.trim() || p.short.length > 8) push(`local ${p.id}: sigla ausente ou longa demais`); if (!validRule(p.rule)) push(`local ${p.id}: regra de recebimento inválida`); if (!PALETTE.includes(p.color)) push(`local ${p.id}: cor fora da paleta`); if (!optBool(p.archived) || !optBool(p.sample) || !optIso(p.updated_at)) push(`local ${p.id}: campos auxiliares inválidos`); }
-  for (const t of d.templates) { if (!P.has(t.place)) push(`modelo ${t.id}: local inexistente`); if (!isTimeHM(t.start) || !isTimeHM(t.end) || t.start === t.end) push(`modelo ${t.id}: horário inválido`); if (!Number.isInteger(t.amount_cents) || t.amount_cents < 0) push(`modelo ${t.id}: valor inválido`); if (typeof t.title !== 'string' || !t.title.trim() || t.title.length > 120) push(`modelo ${t.id}: título ausente ou longo demais`); if (!optBool(t.archived) || !optBool(t.sample)) push(`modelo ${t.id}: campos auxiliares inválidos`); }
+  for (const t of d.templates) { if (!P.has(t.place)) push(`modelo ${t.id}: local inexistente`); if (!isTimeHM(t.start) || !isTimeHM(t.end) || t.start === t.end) push(`modelo ${t.id}: horário inválido`); if (safeCents(t.amount_cents) == null) push(`modelo ${t.id}: valor inválido`); if (typeof t.title !== 'string' || !t.title.trim() || t.title.length > 120) push(`modelo ${t.id}: título ausente ou longo demais`); if (!optBool(t.archived) || !optBool(t.sample)) push(`modelo ${t.id}: campos auxiliares inválidos`); }
   for (const se of d.series) {
     if (!['daily', 'weekly', 'monthly', 'yearly'].includes(se.freq)) push(`série ${se.id}: frequência inválida`); if (!Number.isInteger(se.interval) || se.interval < 1 || se.interval > 52) push(`série ${se.id}: intervalo inválido`);
     if (!isDateKey(se.starts_on) || !isDateKey(se.until) || se.until < se.starts_on) push(`série ${se.id}: período inválido`); if (!Array.isArray(se.exdates) || se.exdates.some(x => !isDateKey(x))) push(`série ${se.id}: datas puladas inválidas`);
     if (typeof se.label !== 'string' || !se.label.trim() || se.label.length > 80) push(`série ${se.id}: rótulo ausente`);
     if (!se.overrides || typeof se.overrides !== 'object' || Array.isArray(se.overrides) || Object.entries(se.overrides).some(([k, o]) => !isDateKey(k) || !o || typeof o !== 'object' || !isTimeHM(o.start) || !isTimeHM(o.end))) push(`série ${se.id}: exceções (overrides) inválidas`);
-    if (se.tpl) { if (!se.tpl || typeof se.tpl !== 'object' || !P.has(se.tpl.place) || !isTimeHM(se.tpl.start) || !isTimeHM(se.tpl.end) || !Number.isInteger(se.tpl.amount_cents) || se.tpl.amount_cents < 0 || typeof se.tpl.title !== 'string' || !se.tpl.title.trim()) push(`série ${se.id}: modelo embutido inválido`); } else if (!T.has(se.template)) push(`série ${se.id}: modelo inexistente`);
+    if (se.tpl) { if (!se.tpl || typeof se.tpl !== 'object' || !P.has(se.tpl.place) || !isTimeHM(se.tpl.start) || !isTimeHM(se.tpl.end) || safeCents(se.tpl.amount_cents) == null || typeof se.tpl.title !== 'string' || !se.tpl.title.trim()) push(`série ${se.id}: modelo embutido inválido`); } else if (!T.has(se.template)) push(`série ${se.id}: modelo inexistente`);
     if (!optBool(se.sample) || !optIso(se.created_at)) push(`série ${se.id}: campos auxiliares inválidos`);
   }
   for (const s of d.shifts) {
     if (!P.has(s.place)) push(`plantão ${s.id}: local inexistente`);
     if (!isIsoLocal(s.start) || !isIsoLocal(s.end)) push(`plantão ${s.id}: data/hora inválida`); else if (s.end <= s.start) push(`plantão ${s.id}: fim antes do início`); else if (Number.isInteger(s.minutes) && s.minutes !== minutesOf(s.start, s.end)) push(`plantão ${s.id}: duração não bate com início e fim`);
-    if (!Number.isInteger(s.amount_cents) || s.amount_cents < 0 || s.amount_cents > 1e9) push(`plantão ${s.id}: valor inválido`);
+    if (safeCents(s.amount_cents) == null) push(`plantão ${s.id}: valor inválido`);
     if (!isDateKey(s.expected_on)) push(`plantão ${s.id}: previsão inválida`); if (s.paid_at != null && !isDateKey(s.paid_at)) push(`plantão ${s.id}: data de recebimento inválida`);
     if (s.series != null && !SE.has(s.series)) push(`plantão ${s.id}: série inexistente`); if (s.template != null && s.template !== '' && !T.has(s.template)) push(`plantão ${s.id}: modelo inexistente`);
     if (typeof s.title !== 'string' || !s.title.trim() || s.title.length > 160) push(`plantão ${s.id}: título ausente ou longo demais`); if (!Number.isInteger(s.minutes) || s.minutes <= 0) push(`plantão ${s.id}: duração inválida`);

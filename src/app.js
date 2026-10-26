@@ -576,9 +576,9 @@ function viewImport() {
     return `<header class="nav"><div class="l"><a class="textb" href="#/dados">Cancelar</a></div><h1 tabindex="-1">Restaurar backup</h1><div class="r"><button class="textb b" data-act="imp-confirm"${ok ? '' : ' aria-disabled="true"'}>Restaurar</button></div></header>
     <div class="gl"><div class="ghead">Arquivo</div><div class="group">
       <div class="cell"><span class="k">Nome</span><span class="v wrap">${esc(im.name)}</span></div>
-      ${b?.exported_at ? `<div class="cell"><span class="k">Exportado em</span><span class="v num">${esc(b.exported_at.replace('T', ' ').slice(0, 16))} UTC</span></div>` : ''}
-      ${b?.app_version ? `<div class="cell"><span class="k">Versão do app</span><span class="v">${esc(b.app_version)}</span></div>` : ''}
-      ${b?.counts ? `<div class="cell"><span class="k">Conteúdo</span><span class="v wrap num">${b.counts.shifts} plantões · ${b.counts.places} locais · ${b.counts.templates} modelos · ${b.counts.series} recorrências</span></div>` : ''}
+      ${typeof b?.exported_at === 'string' ? `<div class="cell"><span class="k">Exportado em</span><span class="v num">${esc(b.exported_at.replace('T', ' ').slice(0, 16))} UTC</span></div>` : ''}
+      ${typeof b?.app_version === 'string' ? `<div class="cell"><span class="k">Versão do app</span><span class="v">${esc(b.app_version.slice(0, 40))}</span></div>` : ''}
+      ${b?.counts && ['shifts', 'places', 'templates', 'series'].every(k => Number.isInteger(b.counts[k])) ? `<div class="cell"><span class="k">Conteúdo</span><span class="v wrap num">${b.counts.shifts} plantões · ${b.counts.places} locais · ${b.counts.templates} modelos · ${b.counts.series} recorrências</span></div>` : ''}
       <div class="cell"><span class="k">Verificação</span><span class="v ${ok ? 'ok' : 'late'}">${ok ? 'íntegro e válido' : 'rejeitado'}</span></div></div>
       ${ok ? `<p class="gfoot">Restaurar substitui tudo o que está no aparelho (${S.shifts.length} plantões hoje). A restauração é atômica e pode ser desfeita em Seus dados › Desfazer.</p>` : `<div class="ghead">Problemas</div><div class="group"><ul class="imp">${pv.errors.slice(0, 30).map(e => `<li>${esc(e)}</li>`).join('')}</ul></div><p class="gfoot">Nada foi alterado.</p>`}</div>`;
   }
@@ -910,15 +910,16 @@ function doDelete(id, scope = 'one') {
   if (S.view === 'detail') { addEventListener('hashchange', f, { once: true }); go('#/calendario/' + k); } else { render(false); f(); }
 }
 $ov.addEventListener('click', e => { if (e.target.classList.contains('dim')) closeOv(); });
+const focusable = el => !el.disabled && !el.hidden && el.getAttribute('aria-hidden') !== 'true' && el.getClientRects().length > 0; /* M2 */
 document.addEventListener('keydown', e => {
   if (OV === null && S?.sheet) { /* M1: a folha de escopo se comporta como os outros diálogos */
     if (e.key === 'Escape') { e.preventDefault(); ACT.sheetx(); return; }
-    if (e.key === 'Tab') { const f = [...document.querySelectorAll('.sheet button, .sheet input')], i = f.indexOf(document.activeElement); if (f.length) { e.preventDefault(); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); } }
+    if (e.key === 'Tab') { const f = [...document.querySelectorAll('.sheet button, .sheet input')].filter(focusable), i = f.indexOf(document.activeElement); if (f.length) { e.preventDefault(); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); } }
     return;
   }
   if (OV === null) { if (e.key === 'Escape' && openLi()) settle(openLi(), ''); return; }
   if (e.key === 'Escape') { e.preventDefault(); closeOv(); }
-  else if (e.key === 'Tab') { const f = [...$ov.querySelectorAll('button, input')], i = f.indexOf(document.activeElement); e.preventDefault(); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); }
+  else if (e.key === 'Tab') { const f = [...$ov.querySelectorAll('button, input')].filter(focusable), i = f.indexOf(document.activeElement); e.preventDefault(); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); }
 });
 window.addEventListener('hashchange', () => closeOv(false));
 
