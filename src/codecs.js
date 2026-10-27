@@ -100,14 +100,17 @@ export function csvPreview(text, data, opts) {
 
 /* H1 (reformulação R4): UMA identidade por plantão. As linhas do arquivo são agrupadas por identidade ANTES de qualquer classificação
    e cada identidade produz exatamente um resultado — novo, idêntico (duplicado), conflito (um só, contra um só registro da base) ou
-   inválido (linhas que se contradizem dentro do arquivo, todas citadas). Materialidade = conflictChanges (valor, título, horário, local,
-   observação); recebimento e previsão nunca entram na comparação. Nenhum registro da base recebe mais de um resultado. */
+   inválido (linhas que se contradizem dentro do arquivo, todas citadas). Dentro do arquivo a comparação é SIMÉTRICA e independe da
+   ordem (sameRow: valor inclusive zero, título, horário, local, observação inclusive vazia, previsão). Contra a base vale a política de
+   mesclagem conflictChanges (valor zero / observação vazia = "não informado", não sobrescrevem). Recebimento nunca entra. Nenhum registro
+   da base recebe mais de um resultado. */
+const sameRow = (a, b) => safeCents(a.amount_cents) === safeCents(b.amount_cents) && normTitle(a.title) === normTitle(b.title) && a.start === b.start && a.end === b.end && a.place === b.place && (a.note || '') === (b.note || '') && (a.expected_on || null) === (b.expected_on || null);
 function classifyGroups(parsed, identity, findBase, why) {
   const groups = new Map(); for (const s of parsed) { const k = identity(s); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); }
   const valid = [], invalid = [], dup = [], conflicts = [], used = new Map();
   for (const g of groups.values()) {
     const rep = g[0], rest = g.slice(1), lines = g.map(x => x.line);
-    if (rest.some(o => conflictChanges(rep, o).length)) { invalid.push({ line: rep.line, lines, reason: `linhas ${lines.join(', ')} descrevem o mesmo plantão (início, fim e local) com valor, título ou observação diferentes — corrija o arquivo` }); continue; }
+    if (rest.some(o => !sameRow(rep, o))) { invalid.push({ line: rep.line, lines, reason: `linhas ${lines.join(', ')} descrevem o mesmo plantão (início, fim e local) com valor, título, observação ou previsão diferentes — corrija o arquivo` }); continue; }
     for (const o of rest) dup.push({ line: o.line, title: o.title, start: o.start, why: `repete a linha ${rep.line}` });
     const base = findBase(rep);
     if (base && used.has(base.id)) { invalid.push({ line: rep.line, lines, reason: `o mesmo plantão da base já é tratado pela linha ${used.get(base.id)}` }); continue; }

@@ -1,8 +1,8 @@
 {
  "app": "meus-plantoes",
- "version": "1.0.0+3d0d9348e8",
- "built_at": "2026-10-27T09:30:24.928361+00:00",
- "source_commit": "7571ba22cfc00e3b618cb509c22305ced003f71d",
+ "version": "1.0.0+f5b435cca5",
+ "built_at": "2026-10-27T21:00:43.652768+00:00",
+ "source_commit": "49bbd4fa4f12071838e174adfc7224b76f5a7534",
  "source_repo": "M:/VKS-DATA/LAB/plantoes-pessoais-20261020 (git local, pasta app/)",
  "public_files": {
   "index.html": {
@@ -14,7 +14,7 @@
    "bytes": 27979
   },
   "sw.js": {
-   "sha256": "aa30a4c64b4f4df95f93ffbcc55458d78081d6f9e6ecd07c6b4e03dddbcbf423",
+   "sha256": "a7b1f1db490015c0b375b91e2034e030b9fdc1f766e84be2683ecaa3e5ea70a6",
    "bytes": 1761
   },
   "manifest.webmanifest": {
@@ -42,11 +42,11 @@
    "bytes": 6773
   },
   "src/codecs.js": {
-   "sha256": "4c20caf259758b1ff46b9c8f29212d52b159790b63ff92e7e27efb1f0fa8b299",
-   "bytes": 24766
+   "sha256": "576a7cb0766be47e1da1f1164f0787cb9c0b71f10daee7a724cac84a234fabad",
+   "bytes": 25245
   },
   "src/version.js": {
-   "sha256": "37dde191a71478a07526dbfee9ed87534fc22ccc2f735ffa3e50fe52287f1109",
+   "sha256": "cc6abdb8577b35db016ac612d7750711de5084ca80f4ffbc6e0ae6997dfdf66d",
    "bytes": 104
   },
   "icons/icon-192.png": {
@@ -70,7 +70,7 @@
    "bytes": 48256
   }
  },
- "tree_sha256": "4f344fa329684dc9a8dfd4dc736d33fee8781cfc054daabd23e2b74029715e1e",
+ "tree_sha256": "bfb96e67fee3e954a002cf986dd72ef0926561e8722a4da4f630ac6ec1f88c7e",
  "notes": [
   "somente arquivos públicos do app; nenhum teste, ferramenta, dado real ou segredo",
   "sample.js = dados fictícios opcionais (Carregar dados de exemplo)",

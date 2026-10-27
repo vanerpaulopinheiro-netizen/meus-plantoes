@@ -1,7 +1,7 @@
 /* Service worker do Meus Plantões — cache do próprio app (nunca de dados): precache ATÔMICO num cache nomeado pela versão
    (se um arquivo falhar, o worker novo não instala e o antigo continua); o cache anterior só é apagado na ativação;
    sem skipWaiting automático — o app avisa "nova versão" e manda SKIP_WAITING quando não há gravação pendente. */
-const VERSION = '1.0.0+3d0d9348e8';
+const VERSION = '1.0.0+f5b435cca5';
 const CACHE = 'mp-' + VERSION;
 const ASSETS = ['./', './index.html', './styles.css', './src/app.js', './src/core.js', './src/store.js', './src/codecs.js', './src/version.js', './sample.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png', './fonts/inter-var.woff2'];
