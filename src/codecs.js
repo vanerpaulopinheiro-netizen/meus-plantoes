@@ -37,6 +37,7 @@ export function parseWhen(v) {
   if (m) {
     const [, y, mo, d, h, mi, , off] = m; if (!isTimeHM(`${h}:${mi}`)) return null; /* H2: 99:99 não entra */
     if (!off || off === `${OFFSET}`) { const k = `${y}-${mo}-${d}`; return isDateKey(k) ? `${k}T${h}:${mi}:00${OFFSET}` : null; }
+    if (!isDateKey(`${y}-${mo}-${d}`)) return null; /* H2 (r4): 30/02 com offset não vira 2 de março */
     const t = Date.parse(`${y}-${mo}-${d}T${h}:${mi}:00${off === 'Z' ? 'Z' : off.replace(/(\d\d)(\d\d)$/, '$1:$2')}`); return Number.isNaN(t) ? null : localIso(t);
   }
   m = v.match(/^(\d\d)\/(\d\d)\/(\d{4})[ T](\d\d):(\d\d)$/); if (m) { const k = `${m[3]}-${m[2]}-${m[1]}`; return isDateKey(k) && isTimeHM(`${m[4]}:${m[5]}`) ? `${k}T${m[4]}:${m[5]}:00${OFFSET}` : null; }
@@ -47,7 +48,9 @@ export function zonedToUtc(y, mo, d, h, mi, tz) {
   let fmt; try { fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch (e) { return null; }
   const asUtc = Date.UTC(y, mo - 1, d, h, mi);
   const offsetAt = ms => { const p = Object.fromEntries(fmt.formatToParts(new Date(ms)).map(x => [x.type, x.value])); return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms; };
-  let guess = asUtc - offsetAt(asUtc); guess = asUtc - offsetAt(guess); return guess;
+  let guess = asUtc - offsetAt(asUtc); guess = asUtc - offsetAt(guess);
+  const p = Object.fromEntries(fmt.formatToParts(new Date(guess)).map(x => [x.type, x.value])); /* M3 (r4): ida e volta tem de devolver a mesma parede */
+  return +p.year === y && +p.month === mo && +p.day === d && +p.hour === h && +p.minute === mi ? guess : NaN;
 }
 /* instante (ms UTC) → texto ISO local com offset fixo */
 export function localIso(ms) { const d = new Date(ms + OFFSET_MIN * 60000); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00${OFFSET}`; }
@@ -145,7 +148,7 @@ export function icsWhen(prop) {
   const [, y, mo, d, h, mi, , z] = m; if (!isDateKey(`${y}-${mo}-${d}`) || !isTimeHM(`${h}:${mi}`)) return null;
   if (z) return { iso: localIso(Date.UTC(+y, +mo - 1, +d, +h, +mi)) };
   const tz = prop.params.TZID; /* H2: TZID conhecido converte pelo fuso declarado; flutuante ou fuso desconhecido = São Paulo */
-  if (tz && tz !== TZ) { const ms = zonedToUtc(+y, +mo, +d, +h, +mi, tz); if (ms != null) return { iso: localIso(ms), tz }; return { iso: `${y}-${mo}-${d}T${h}:${mi}:00${OFFSET}`, tzUnknown: tz }; }
+  if (tz && tz !== TZ) { const ms = zonedToUtc(+y, +mo, +d, +h, +mi, tz); if (Number.isNaN(ms)) return null; /* M3: horário inexistente no fuso declarado */ if (ms != null) return { iso: localIso(ms), tz }; return { iso: `${y}-${mo}-${d}T${h}:${mi}:00${OFFSET}`, tzUnknown: tz }; }
   return { iso: `${y}-${mo}-${d}T${h}:${mi}:00${OFFSET}` };
 }
 export function icsPreview(text, data) {
@@ -193,6 +196,8 @@ export async function backupVerify(obj) {
   if (!obj || typeof obj !== 'object' || obj.app !== 'meus-plantoes') errors.push('não é um backup do Meus Plantões');
   else {
     if (obj.schema_version !== SCHEMA_VERSION) errors.push(`versão do backup não suportada (${obj.schema_version}; esta versão do app lê ${SCHEMA_VERSION})`);
+    if (typeof obj.exported_at !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(obj.exported_at)) errors.push('data de exportação ausente ou inválida'); /* N2 (r4): metadados com tipo validado aqui, antes de qualquer tela */
+    if (typeof obj.app_version !== 'string' || !obj.app_version || obj.app_version.length > 40) errors.push('versão do app ausente ou inválida');
     if (!obj.data || typeof obj.data !== 'object') errors.push('backup sem dados');
     else {
       const h = await sha256Hex(stableStringify(obj.data)); if (h !== obj.sha256) errors.push('o conteúdo não bate com a assinatura (sha256) — arquivo alterado ou truncado');

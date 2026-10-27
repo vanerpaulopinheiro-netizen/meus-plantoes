@@ -80,9 +80,10 @@ export function cohortOf(shifts, ym, by) {
 export const overdueOf = (shifts, today) => shifts.filter(s => !s.paid_at && s.expected_on < today).sort((a, b) => a.expected_on.localeCompare(b.expected_on));
 
 /* ---------- recorrência ---------- */
+export const MAX_OCC = 500; /* M4: teto de ocorrências por recorrência; gera uma a mais para o chamador detectar o excesso */
 export function occurrences(freq, iv, from, until) {
   const out = [], d0 = +from.slice(8, 10);
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i <= MAX_OCC; i++) {
     const k = freq === 'daily' ? addDays(from, i * iv) : freq === 'weekly' ? addDays(from, 7 * i * iv) : freq === 'monthly' ? addMonths(from, i * iv, d0) : addMonths(from, 12 * i * iv, d0);
     if (k > until) break; out.push(k);
   }
@@ -107,6 +108,7 @@ export function validateForm(f) {
   if (f.expected && !isDateKey(f.expected)) e.expected = 'previsão';
   if (f.paid && !isDateKey(f.paidAt)) e.paidAt = 'data do recebimento';
   if (f.repeat !== 'none' && (!isDateKey(f.until) || (f.date && f.until < f.date))) e.until = 'até quando repete';
+  else if (f.repeat !== 'none' && isDateKey(f.date) && repDates(f).length > MAX_OCC) e.until = `período longo demais (máximo ${MAX_OCC} plantões por recorrência)`; /* M4 */
   return e;
 }
 export function repDates(f) { const { freq, interval } = seriesFreq(f.repeat); return f.repeat === 'none' || !f.until || !f.date || f.until < f.date ? [f.date] : occurrences(freq, interval, f.date, f.until); }
@@ -140,7 +142,8 @@ export function validateDataset(d) {
   for (const t of d.templates) { if (!P.has(t.place)) push(`modelo ${t.id}: local inexistente`); if (!isTimeHM(t.start) || !isTimeHM(t.end) || t.start === t.end) push(`modelo ${t.id}: horário inválido`); if (safeCents(t.amount_cents) == null) push(`modelo ${t.id}: valor inválido`); if (typeof t.title !== 'string' || !t.title.trim() || t.title.length > 120) push(`modelo ${t.id}: título ausente ou longo demais`); if (!optBool(t.archived) || !optBool(t.sample)) push(`modelo ${t.id}: campos auxiliares inválidos`); }
   for (const se of d.series) {
     if (!['daily', 'weekly', 'monthly', 'yearly'].includes(se.freq)) push(`série ${se.id}: frequência inválida`); if (!Number.isInteger(se.interval) || se.interval < 1 || se.interval > 52) push(`série ${se.id}: intervalo inválido`);
-    if (!isDateKey(se.starts_on) || !isDateKey(se.until) || se.until < se.starts_on) push(`série ${se.id}: período inválido`); if (!Array.isArray(se.exdates) || se.exdates.some(x => !isDateKey(x))) push(`série ${se.id}: datas puladas inválidas`);
+    if (!isDateKey(se.starts_on) || !isDateKey(se.until) || se.until < se.starts_on) push(`série ${se.id}: período inválido`);
+    else if (occurrences(se.freq, se.interval, se.starts_on, se.until).length > MAX_OCC) push(`série ${se.id}: período longo demais`); /* M4 */ if (!Array.isArray(se.exdates) || se.exdates.some(x => !isDateKey(x))) push(`série ${se.id}: datas puladas inválidas`);
     if (typeof se.label !== 'string' || !se.label.trim() || se.label.length > 80) push(`série ${se.id}: rótulo ausente`);
     if (!se.overrides || typeof se.overrides !== 'object' || Array.isArray(se.overrides) || Object.entries(se.overrides).some(([k, o]) => !isDateKey(k) || !o || typeof o !== 'object' || !isTimeHM(o.start) || !isTimeHM(o.end))) push(`série ${se.id}: exceções (overrides) inválidas`);
     if (se.tpl) { if (!se.tpl || typeof se.tpl !== 'object' || !P.has(se.tpl.place) || !isTimeHM(se.tpl.start) || !isTimeHM(se.tpl.end) || safeCents(se.tpl.amount_cents) == null || typeof se.tpl.title !== 'string' || !se.tpl.title.trim()) push(`série ${se.id}: modelo embutido inválido`); } else if (!T.has(se.template)) push(`série ${se.id}: modelo inexistente`);

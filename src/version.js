@@ -1,2 +1,2 @@
 /* gerado por tools/stamp.mjs — não editar à mão */
-export const APP_VERSION = '1.0.0+7b046b3b8e';
+export const APP_VERSION = '1.0.0+9433eb56a1';
