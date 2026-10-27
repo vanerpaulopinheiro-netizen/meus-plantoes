@@ -1,8 +1,8 @@
 {
  "app": "meus-plantoes",
- "version": "1.0.0+9433eb56a1",
- "built_at": "2026-10-26T22:09:09.965189+00:00",
- "source_commit": "9fcaabcc8af67a3f89a5b35f5a8979da5e88d88c",
+ "version": "1.0.0+3d0d9348e8",
+ "built_at": "2026-10-27T09:30:24.928361+00:00",
+ "source_commit": "7571ba22cfc00e3b618cb509c22305ced003f71d",
  "source_repo": "M:/VKS-DATA/LAB/plantoes-pessoais-20261020 (git local, pasta app/)",
  "public_files": {
   "index.html": {
@@ -14,7 +14,7 @@
    "bytes": 27979
   },
   "sw.js": {
-   "sha256": "a0c36f0fb0ba3cf1f47b72884891aa49959cd0813edc549478198112090093cb",
+   "sha256": "aa30a4c64b4f4df95f93ffbcc55458d78081d6f9e6ecd07c6b4e03dddbcbf423",
    "bytes": 1761
   },
   "manifest.webmanifest": {
@@ -30,23 +30,23 @@
    "bytes": 3743
   },
   "src/app.js": {
-   "sha256": "2d65153b1e785c04ff607ef98f87c67173c34c0cc87eac3491d79a38ed575b93",
-   "bytes": 107470
+   "sha256": "5c289e0955a1ca9a984b86e21f4a6d2c0611ce8ba8898c43b06760ef163e909b",
+   "bytes": 107789
   },
   "src/core.js": {
-   "sha256": "f284849548e84c8a29dc0129dde5d3132d8db8cdc59070a096d9cbeec2029caa",
-   "bytes": 16018
+   "sha256": "81d4196953db018abd87b4b7058e9c850e0a2a1997ff4672b511f5aedc2680f0",
+   "bytes": 16131
   },
   "src/store.js": {
    "sha256": "eb21f2620d462126ae37f9d359881e463f4bf6c944ed2f243f61847b4420aa79",
    "bytes": 6773
   },
   "src/codecs.js": {
-   "sha256": "805787cc241cea09ef96b7dd22b88b0cdcd69471aacd960ef5ae4b03ce3ec932",
-   "bytes": 24029
+   "sha256": "4c20caf259758b1ff46b9c8f29212d52b159790b63ff92e7e27efb1f0fa8b299",
+   "bytes": 24766
   },
   "src/version.js": {
-   "sha256": "5aa94fe04e0b9860a94413ee87b972fccf90173f8f22dd61cbb1a5b7ca138100",
+   "sha256": "37dde191a71478a07526dbfee9ed87534fc22ccc2f735ffa3e50fe52287f1109",
    "bytes": 104
   },
   "icons/icon-192.png": {
@@ -70,10 +70,11 @@
    "bytes": 48256
   }
  },
- "tree_sha256": "5f89faea2ff9b575cdf7ef3be2ab50769b719c599f294da95e7710d7a127295b",
+ "tree_sha256": "4f344fa329684dc9a8dfd4dc736d33fee8781cfc054daabd23e2b74029715e1e",
  "notes": [
   "somente arquivos públicos do app; nenhum teste, ferramenta, dado real ou segredo",
   "sample.js = dados fictícios opcionais (Carregar dados de exemplo)",
-  "CSP default-src 'self'; nenhuma requisição externa"
+  "CSP default-src 'self'; nenhuma requisição externa",
+  "CNAME = plantoes.vksos.tech (domínio próprio do Pages)"
  ]
 }

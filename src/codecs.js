@@ -1,7 +1,7 @@
 /* codecs.js — portabilidade do Meus Plantões (SPEC §3): CSV da escala (formato documentado do Plantãozinho), CSV com ganhos,
    ICS (exportar/importar), backup JSON verificado por SHA-256. Funções puras sobre o conjunto {places, templates, series, shifts};
    nada aqui grava — a prévia decide e o app aplica. Testado em node:test. */
-import { OFFSET, OFFSET_MIN, TZ, isDateKey, isTimeHM, isIsoLocal, minutesOf, parseDecimalCents, decimalTxt, safeCents, ruleTxtFor, dm, dmy, brl, normTitle, dupKeyCsv, dupKeyIcs, uid, validateDataset, SCHEMA_VERSION, pad } from './core.js';
+import { OFFSET, OFFSET_MIN, TZ, isDateKey, isTimeHM, isIsoLocal, minutesOf, parseDecimalCents, decimalTxt, safeCents, ruleTxtFor, dm, dmy, brl, normTitle, dupKeyIcs, uid, validateDataset, SCHEMA_VERSION, pad } from './core.js';
 
 /* ---------- CSV ---------- */
 /* M4: células de texto que começam com = + - @ (ou tab/CR) ganham apóstrofo — planilhas não as executam como fórmula */
@@ -56,7 +56,7 @@ export function zonedToUtc(y, mo, d, h, mi, tz) {
 export function localIso(ms) { const d = new Date(ms + OFFSET_MIN * 60000); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00${OFFSET}`; }
 export const CSV_HEADER = ['id', 'title', 'place', 'color', 'start_date', 'end_date', 'value', 'notes'];
 export const CSV_HEADER_GANHOS = ['id', 'title', 'place', 'start_date', 'end_date', 'hours', 'value', 'expected_on', 'paid_at', 'status', 'rule'];
-const PALETTE_HEX = { w1: '#34C759', w2: '#2FA4C0', w3: '#AF52DE', w4: '#FF9500', w5: '#E0395F' };
+const PALETTE_HEX = { w1: '#34C759', w2: '#2FA4C0', w3: '#AF52DE', w4: '#FF9500', w5: '#E0395F', w6: '#007AFF', w7: '#FFCC00', w8: '#5856D6', w9: '#00C7BE', w10: '#A2845E' };
 export function csvExport(data) {
   const P = Object.fromEntries(data.places.map(p => [p.id, p]));
   return csvStringify(sortedShifts(data.shifts).map(s => [s.id, s.title, P[s.place]?.name || '', PALETTE_HEX[P[s.place]?.color] || '', s.start, s.end, decimalTxt(s.amount_cents), s.note || '']), CSV_HEADER);
@@ -77,8 +77,8 @@ export function csvPreview(text, data, opts) {
   const col = csvColumns(rows[0]); const need = ['start', 'end', 'value'].filter(k => col[k] == null);
   if (need.length) return { error: `cabeçalho sem coluna: ${need.join(', ')}`, valid: [], invalid: [], dup: [], newPlaces: [], header: rows[0] };
   const byName = new Map(data.places.map(p => [normTitle(p.name), p])); const byShort = new Map(data.places.map(p => [normTitle(p.short), p]));
-  const existing = new Set(data.shifts.map(dupKeyCsv)), seen = new Set(), valid = [], invalid = [], dup = [], conflicts = [], newPlaces = new Map();
-  const key3 = s => `${s.start}|${s.end}|${s.place}`, byKey3 = new Map(data.shifts.map(s => [key3(s), s])), seen3 = new Map(); /* conflito = mesmo plantão (início, fim, local) com conteúdo diferente */
+  const key3 = s => `${s.start}|${s.end}|${s.place}`, byKey3 = new Map(data.shifts.map(s => [key3(s), s])); /* identidade do plantão no CSV: início, fim e local */
+  const invalid = [], parsed = [], newPlaces = new Map();
   rows.slice(1).forEach((r, i) => {
     const line = i + 2, cell = k => col[k] == null ? '' : (r[col[k]] ?? '').trim();
     const start = parseWhen(cell('start')), end = parseWhen(cell('end')), cents = parseDecimalCents(cell('value'));
@@ -88,18 +88,38 @@ export function csvPreview(text, data, opts) {
     if (end <= start) return invalid.push({ line, reason: 'fim antes do início' });
     if (cents == null || cents < 0) return invalid.push({ line, reason: `valor inválido: "${cell('value')}"` });
     if (!placeName) return invalid.push({ line, reason: 'sem local' });
-    let place = byName.get(normTitle(placeName)) || byShort.get(normTitle(placeName)), placeId = place?.id, isNew = false;
-    if (!place) { isNew = true; const np = newPlaces.get(normTitle(placeName)) || { name: placeName, color: cell('color'), count: 0, tempId: `new:${normTitle(placeName)}` }; np.count++; newPlaces.set(normTitle(placeName), np); placeId = np.tempId; }
-    const s = { id: uid(), title, place: placeId, start, end, minutes: minutesOf(start, end), amount_cents: cents, note: unFormula(cell('notes')), paid_at: null, expected_on: null, line, newPlace: isNew ? placeName : null };
     const paid = cell('paid'), ex = cell('expected'); /* m2: data fornecida e inválida invalida a linha (não é descartada em silêncio) */
-    if (paid) { if (!isDateKey(paid)) { if (isNew) { const np = newPlaces.get(normTitle(placeName)); if (np && --np.count === 0) newPlaces.delete(normTitle(placeName)); } return invalid.push({ line, reason: `recebido em inválido: "${paid}"` }); } s.paid_at = paid; }
-    if (ex) { if (!isDateKey(ex)) { if (isNew) { const np = newPlaces.get(normTitle(placeName)); if (np && --np.count === 0) newPlaces.delete(normTitle(placeName)); } return invalid.push({ line, reason: `previsão inválida: "${ex}"` }); } s.expected_on = ex; }
-    const key = dupKeyCsv(s); if (existing.has(key) || seen.has(key)) return dup.push({ line, title, start }); seen.add(key);
-    const ex0 = byKey3.get(key3(s)); if (ex0) { const changes = conflictChanges(ex0, s); if (changes.length) return conflicts.push({ line, title, start, existingId: ex0.id, changes, incoming: s }); return dup.push({ line, title, start }); }
-    const inFile = seen3.get(key3(s)); if (inFile) return invalid.push({ line, reason: `repete a linha ${inFile} (mesmo início, fim e local) com conteúdo diferente` }); seen3.set(key3(s), line); /* H1: dentro do arquivo, o mesmo plantão com outro valor/título não entra duas vezes */
-    valid.push(s);
+    if (paid && !isDateKey(paid)) return invalid.push({ line, reason: `recebido em inválido: "${paid}"` });
+    if (ex && !isDateKey(ex)) return invalid.push({ line, reason: `previsão inválida: "${ex}"` });
+    const k = normTitle(placeName), place = byName.get(k) || byShort.get(k); let placeId = place?.id;
+    if (!place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, color: cell('color'), count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; }
+    parsed.push({ id: uid(), title, place: placeId, start, end, minutes: minutesOf(start, end), amount_cents: cents, note: unFormula(cell('notes')), paid_at: paid || null, expected_on: ex || null, line, newPlace: place ? null : placeName });
   });
-  return { valid, invalid, dup, conflicts, newPlaces: [...newPlaces.values()], header: rows[0], total: rows.length - 1 };
+  return finishPreview(classifyGroups(parsed, key3, s => byKey3.get(key3(s)) || null, () => undefined), invalid, newPlaces, { header: rows[0], total: rows.length - 1 });
+}
+
+/* H1 (reformulação R4): UMA identidade por plantão. As linhas do arquivo são agrupadas por identidade ANTES de qualquer classificação
+   e cada identidade produz exatamente um resultado — novo, idêntico (duplicado), conflito (um só, contra um só registro da base) ou
+   inválido (linhas que se contradizem dentro do arquivo, todas citadas). Materialidade = conflictChanges (valor, título, horário, local,
+   observação); recebimento e previsão nunca entram na comparação. Nenhum registro da base recebe mais de um resultado. */
+function classifyGroups(parsed, identity, findBase, why) {
+  const groups = new Map(); for (const s of parsed) { const k = identity(s); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); }
+  const valid = [], invalid = [], dup = [], conflicts = [], used = new Map();
+  for (const g of groups.values()) {
+    const rep = g[0], rest = g.slice(1), lines = g.map(x => x.line);
+    if (rest.some(o => conflictChanges(rep, o).length)) { invalid.push({ line: rep.line, lines, reason: `linhas ${lines.join(', ')} descrevem o mesmo plantão (início, fim e local) com valor, título ou observação diferentes — corrija o arquivo` }); continue; }
+    for (const o of rest) dup.push({ line: o.line, title: o.title, start: o.start, why: `repete a linha ${rep.line}` });
+    const base = findBase(rep);
+    if (base && used.has(base.id)) { invalid.push({ line: rep.line, lines, reason: `o mesmo plantão da base já é tratado pela linha ${used.get(base.id)}` }); continue; }
+    if (base) { used.set(base.id, rep.line); const changes = conflictChanges(base, rep); if (changes.length) conflicts.push({ line: rep.line, title: rep.title, start: rep.start, existingId: base.id, changes, incoming: rep }); else dup.push({ line: rep.line, title: rep.title, start: rep.start, why: why(rep) }); continue; }
+    valid.push(rep);
+  }
+  return { valid, invalid, dup, conflicts };
+}
+function finishPreview({ valid, invalid: inv2, dup, conflicts }, invalid, newPlaces, extra) {
+  for (const np of newPlaces.values()) np.count = 0;
+  for (const s of valid) if (s.newPlace) newPlaces.get(normTitle(s.newPlace)).count++; /* locais novos contam só o que vai entrar */
+  return { valid, invalid: [...invalid, ...inv2].sort((a, b) => a.line - b.line), dup, conflicts, newPlaces: [...newPlaces.values()].filter(np => np.count > 0), ...extra };
 }
 
 /* diferenças materiais entre o plantão existente e o importado (valor, título, horário, local, observação) */
@@ -155,9 +175,8 @@ export function icsPreview(text, data) {
   const events = icsParse(text); if (!events.length) return { error: 'nenhum evento (VEVENT) no arquivo', valid: [], invalid: [], dup: [], newPlaces: [] };
   if (events.length > MAX_RECORDS) return { error: `agenda com mais de ${MAX_RECORDS} eventos — divida o arquivo`, valid: [], invalid: [], dup: [], newPlaces: [] };
   const byName = new Map(data.places.map(p => [normTitle(p.name), p])); const byShort = new Map(data.places.map(p => [normTitle(p.short), p]));
-  const ownIds = new Set(data.shifts.map(s => s.id)), extUids = new Set(data.shifts.map(s => s.ext_uid).filter(Boolean)), keys = new Set(data.shifts.map(dupKeyIcs));
-  const byIdMap = new Map(data.shifts.map(s => [s.id, s])), byExt = new Map(data.shifts.filter(s => s.ext_uid).map(s => [s.ext_uid, s]));
-  const valid = [], invalid = [], dup = [], conflicts = [], newPlaces = new Map(), seen = new Set();
+  const byIdMap = new Map(data.shifts.map(s => [s.id, s])), byExt = new Map(data.shifts.filter(s => s.ext_uid).map(s => [s.ext_uid, s])), byKey = new Map(data.shifts.map(s => [dupKeyIcs(s), s]));
+  const invalid = [], parsed = [], newPlaces = new Map();
   events.forEach((e, i) => {
     const n = i + 1, g = k => e.props[k]?.value ? icsUnesc(e.props[k].value).trim() : '';
     const st = icsWhen(e.props.DTSTART), en = icsWhen(e.props.DTEND);
@@ -168,18 +187,17 @@ export function icsPreview(text, data) {
     const placeName = g('X-MP-PLACE') || g('LOCATION') || (summary.includes(' · ') ? summary.split(' · ').pop() : '');
     const title = summary.includes(' · ') ? summary.split(' · ').slice(0, -1).join(' · ') : summary;
     if (!placeName) return invalid.push({ line: n, reason: 'sem local (LOCATION)' });
-    let place = byName.get(normTitle(placeName)) || byShort.get(normTitle(placeName)), placeId = place?.id, isNew = false;
-    if (!place) { isNew = true; const np = newPlaces.get(normTitle(placeName)) || { name: placeName, count: 0, tempId: `new:${normTitle(placeName)}` }; np.count++; newPlaces.set(normTitle(placeName), np); placeId = np.tempId; }
+    const k = normTitle(placeName), place = byName.get(k) || byShort.get(k); let placeId = place?.id;
+    if (!place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; }
     const centsRaw = g('X-MP-AMOUNT-CENTS'); const cents = /^\d{1,10}$/.test(centsRaw) ? (safeCents(+centsRaw) ?? 0) : 0; /* B1: inteiro seguro dentro do teto; fora disso = sem valor */
-    const s = { id: uid(), ext_uid: uidRaw || null, title, place: placeId, start: st.iso, end: en.iso, minutes: minutesOf(st.iso, en.iso), amount_cents: cents, note: cents || own ? '' : (g('DESCRIPTION') ? g('DESCRIPTION').slice(0, 200) : '') /* DESCRIPTION vira observação só em evento externo sem valor; o nosso já existe aqui */, paid_at: isDateKey(g('X-MP-PAID')) ? g('X-MP-PAID') : null, expected_on: isDateKey(g('X-MP-EXPECTED')) ? g('X-MP-EXPECTED') : null, line: n, newPlace: isNew ? placeName : null, noAmount: !cents, tzUnknown: st.tzUnknown || en.tzUnknown || null };
-    /* identidade (SPEC §3): UID nosso → id; UID externo → ext_uid; sem UID → chave normalizada sem valor */
-    const match = own && ownIds.has(own[1]) ? byIdMap.get(own[1]) : (uidRaw && extUids.has(uidRaw) ? byExt.get(uidRaw) : null);
-    if (match) { const changes = conflictChanges(match, s); if (changes.length) return conflicts.push({ line: n, title, start: st.iso, existingId: match.id, changes, incoming: s }); return dup.push({ line: n, title, start: st.iso, why: own ? 'exportado por este app' : 'mesmo UID' }); }
-    if (uidRaw && seen.has('u:' + uidRaw)) return dup.push({ line: n, title, start: st.iso, why: 'mesmo UID' });
-    const key = dupKeyIcs(s); if (!uidRaw && (keys.has(key) || seen.has('k:' + key))) return dup.push({ line: n, title, start: st.iso, why: 'mesmo horário, local e título' });
-    seen.add(uidRaw ? 'u:' + uidRaw : 'k:' + key); valid.push(s);
+    parsed.push({ id: uid(), ext_uid: uidRaw || null, title, place: placeId, start: st.iso, end: en.iso, minutes: minutesOf(st.iso, en.iso), amount_cents: cents, note: cents || own ? '' : (g('DESCRIPTION') ? g('DESCRIPTION').slice(0, 200) : '') /* DESCRIPTION vira observação só em evento externo sem valor; o nosso já existe aqui */, paid_at: isDateKey(g('X-MP-PAID')) ? g('X-MP-PAID') : null, expected_on: isDateKey(g('X-MP-EXPECTED')) ? g('X-MP-EXPECTED') : null, line: n, newPlace: place ? null : placeName, noAmount: !cents, tzUnknown: st.tzUnknown || en.tzUnknown || null });
   });
-  return { valid, invalid, dup, conflicts, newPlaces: [...newPlaces.values()], total: events.length };
+  /* identidade (SPEC §3): UID nosso → id; UID externo → ext_uid; sem UID → chave normalizada sem valor */
+  const ownOf = s => (s.ext_uid || '').match(/^(.+)@meus-plantoes$/);
+  const identity = s => { const o = ownOf(s); return o ? 'i:' + o[1] : s.ext_uid ? 'u:' + s.ext_uid : 'k:' + dupKeyIcs(s); };
+  const findBase = s => { const o = ownOf(s); return (o ? byIdMap.get(o[1]) : s.ext_uid ? byExt.get(s.ext_uid) : byKey.get(dupKeyIcs(s))) || null; };
+  const why = s => ownOf(s) ? 'exportado por este app' : s.ext_uid ? 'mesmo UID' : 'mesmo horário, local e título';
+  return finishPreview(classifyGroups(parsed, identity, findBase, why), invalid, newPlaces, { total: events.length });
 }
 
 /* ---------- backup JSON ---------- */

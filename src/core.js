@@ -60,7 +60,7 @@ export function parseDecimalCents(v) { v = String(v ?? '').trim(); if (!v || v.l
 export const decimalTxt = c => (c / 100).toFixed(2);
 
 /* ---------- previsão de recebimento (regra do local) ---------- */
-export const PALETTE = ['w1', 'w2', 'w3', 'w4', 'w5'];
+export const PALETTE = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8', 'w9', 'w10']; /* R4: 10 cores (pedido do dono 27/10); hex em app.js PAL e design/tokens.json */
 export function ruleDateFor(rule, k) { return rule.kind === 'days_after' ? addDays(k, rule.days) : addMonths(k, 1, rule.day); }
 export function ruleTxtFor(rule) { return rule.kind === 'days_after' ? `${rule.days} dias após o plantão` : `dia ${rule.day} do mês seguinte`; }
 export const validRule = r => !!r && (r.kind === 'days_after' ? Number.isInteger(r.days) && r.days >= 0 && r.days <= 366 : r.kind === 'fixed_day' && Number.isInteger(r.day) && r.day >= 1 && r.day <= 31);

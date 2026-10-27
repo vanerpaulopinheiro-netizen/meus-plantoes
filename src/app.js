@@ -10,8 +10,8 @@ const Q = new URLSearchParams(location.search);
 const TODAY_FIXED = isDateKey(Q.get('today')) ? Q.get('today') : null; /* testes: ?today=YYYY-MM-DD */
 let TODAY = TODAY_FIXED || todayKey();
 /* cor de cada local: um par claro/escuro da paleta do iOS (o app guarda a chave da paleta, não o hex) */
-const PAL = { w1: ['#34C759', '#30D158'], w2: ['#2FA4C0', '#40C8E0'], w3: ['#AF52DE', '#BF5AF2'], w4: ['#FF9500', '#FF9F0A'], w5: ['#E0395F', '#FF375F'] };
-const PAL_NAMES = { w1: 'Verde', w2: 'Azul-água', w3: 'Roxo', w4: 'Laranja', w5: 'Rosa' };
+const PAL = { w1: ['#34C759', '#30D158'], w2: ['#2FA4C0', '#40C8E0'], w3: ['#AF52DE', '#BF5AF2'], w4: ['#FF9500', '#FF9F0A'], w5: ['#E0395F', '#FF375F'], w6: ['#007AFF', '#0A84FF'], w7: ['#FFCC00', '#FFD60A'], w8: ['#5856D6', '#5E5CE6'], w9: ['#00C7BE', '#63E6E2'], w10: ['#A2845E', '#AC8E68'] };
+const PAL_NAMES = { w1: 'Verde', w2: 'Azul-água', w3: 'Roxo', w4: 'Laranja', w5: 'Rosa', w6: 'Azul', w7: 'Amarelo', w8: 'Índigo', w9: 'Menta', w10: 'Marrom' };
 const DEFAULT_RULE = { kind: 'days_after', days: 30 };
 
 /* ---------- tema ---------- */
@@ -146,7 +146,7 @@ function backupNotice() {
 }
 function firstRun() {
   return `<div class="gl"><section class="first" aria-labelledby="fr-t"><h2 id="fr-t">Seus plantões, só neste aparelho</h2>
-    <p>Comece cadastrando um local (hospital, UPA, clínica) com a regra de recebimento; depois registre os plantões pelo "+". Também dá para importar uma planilha ou ver o app com dados de exemplo.</p>
+    <p>Comece cadastrando um local (hospital, UPA, clínica) com a regra de recebimento; depois registre os plantões pelo "+". Também dá para importar uma planilha ou ver o app com dados de exemplo. Já usava o app em outro endereço ou aparelho? Restaure o seu backup em “Importar planilha ou backup”.</p>
     <div class="acts"><a class="btn p" href="#/local/novo" style="display:flex;align-items:center;justify-content:center">Cadastrar um local</a><a class="btn" href="#/dados" style="display:flex;align-items:center;justify-content:center">Importar planilha ou backup</a><button class="btn" data-act="sample">Carregar dados de exemplo</button></div></section></div>`;
 }
 function dayCell(k, inMonth) {
