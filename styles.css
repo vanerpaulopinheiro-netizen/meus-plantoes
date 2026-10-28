@@ -322,3 +322,128 @@ li.flash .row { animation: flash 1.6s ease-out; }
 .priv p { font-size: 15px; line-height: 21px; color: var(--label2); margin: 8px 0; }
 
 .toast button { white-space: nowrap; }
+.nolocal { color: var(--label3); } /* R6: plantão sem local — marca neutra, nunca cor de local */
+
+/* =====================================================================================================
+   R6 · candidato B — Clean Premium: a mesma informação com mais respiro e menos peso.
+   Grade 17 px em passo de 58 px · linha do dia ≈ 62 px com faixa de 4 px e estado em texto com ponto ·
+   herói financeiro de 34 px · ícones em círculo suave · separadores finos · cabeçalhos em sentence case.
+   ===================================================================================================== */
+.textb { display: inline-flex; align-items: center; } /* "Cancelar" alinhado ao título (antes caía 20 px acima) */
+
+/* calendário: número 17 px, passo 56 + 2 = 58 px; selecionado = círculo cheio no acento; hoje = acento suave */
+.wk { font-size: 13px; font-weight: 500; letter-spacing: 0; padding: 8px 0 2px; }
+.day { height: 56px; padding: 6px 0 0; gap: 4px; }
+.day .n { width: 32px; height: 32px; font-size: 17px; letter-spacing: 0; }
+.day.today .n { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.day.sel .n, .day.sel:not(.today) .n { background: var(--accent); color: var(--on-accent); box-shadow: none; font-weight: 600; }
+.dots { gap: 3px; height: 5px; } .dots i, .dots i.night { width: 5px; height: 5px; } .dots em { line-height: 5px; }
+.legend { gap: 16px; padding: 12px 20px 0; } .legend i { width: 6px; height: 6px; }
+
+/* ícone em círculo suave (Ajustes e lembrete de backup) */
+.ico { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.ico.ok { background: var(--ok-soft); color: var(--ok); }
+.ico.mute { background: var(--fill2); color: var(--label2); }
+.notice { display: flex; align-items: center; gap: 12px; margin: 16px 16px 0; padding: 10px 14px; min-height: 56px; border-radius: 14px; background: var(--fill); color: var(--label); font-size: 15px; line-height: 20px; }
+.notice .nt { flex: 1; min-width: 0; }
+.notice .na { flex: none; display: inline-flex; align-items: center; gap: 2px; color: var(--accent); font-weight: 500; }
+
+/* lista do dia: 62 px, faixa 4×36, hairline a partir do texto */
+.dayhead { gap: 2px; padding: 24px 20px 6px; }
+.row { grid-template-columns: 4px minmax(0, 1fr) auto 12px; gap: 12px; min-height: 62px; padding: 4px 4px 4px 0; }
+.bar { width: 4px; height: 36px; border-radius: 2px; }
+.when { line-height: 15px; gap: 5px; }
+.ttl { line-height: 21px; margin: 1px 0 0; }
+.where { line-height: 18px; }
+.amt { line-height: 22px; }
+.chev { color: var(--fill3); }
+.st { line-height: 16px; margin-top: 2px; gap: 6px; }
+.st svg { display: none; }
+.st::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; } /* ponto + texto, nunca só cor */
+.st.pend::before { background: var(--label3); }
+.sws { border-bottom: 0; }
+.sws::after { content: ""; position: absolute; left: 16px; right: 0; bottom: 0; border-bottom: .5px solid var(--sep); pointer-events: none; }
+.rows li:last-child .sws::after { display: none; }
+li.sl .sws .row, .pg .row, .rows li.plain .row { grid-template-columns: 4px minmax(0, 1fr) auto; }
+.pg .row .chev { display: none; } /* 3 colunas: a seta caía numa segunda linha da grade e somava altura */
+
+/* detalhes: herói, meta com ícones alinhados, seções por hairline e espaço generoso */
+.detail { padding: 4px 20px 0; }
+.hd { margin: 16px 0 18px; } .hd .bar { width: 4px; height: 40px; }
+.meta { gap: 8px; padding-bottom: 22px; }
+.meta .d, .meta .ml { display: flex; gap: 10px; align-items: center; }
+.meta .ml svg { margin: 0 1px; color: var(--label3); }
+.meta .ml.mo, .meta .ml.mo svg { color: var(--accent); }
+.meta .note { padding-left: 30px; }
+.sect { padding: 14px 0; }
+.kv { min-height: 48px; }
+.sdot::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin: 0 8px 1px 0; }
+.sdot.pend::before { background: var(--label3); }
+.del { margin-top: 24px; }
+
+/* listas agrupadas e formulário: cabeçalhos em sentence case, grupos com respiro, ajuda bem assentada */
+.ghead { font-size: 15px; line-height: 20px; font-weight: 600; color: var(--label); text-transform: none; letter-spacing: 0; padding: 26px 4px 8px; }
+.mlabel { font-size: 15px; font-weight: 600; color: var(--label); text-transform: none; letter-spacing: 0; padding: 22px 20px 6px; }
+.mlabel::first-letter { text-transform: uppercase; }
+.gl .group { margin-top: 20px; } .gl .ghead + .group { margin-top: 0; }
+.gl .chips { padding-bottom: 0; }
+.cell { min-height: 52px; }
+.gfoot { padding: 8px 16px 0; }
+.status-line { padding: 16px 4px 0; }
+.group.ics .cell .k { white-space: nowrap; }
+.cell .k:has(.kt) { flex: 1 1 auto; min-width: 0; } .cell .k .kt { min-width: 0; }
+.cell:has(.kt) { padding-top: 7px; padding-bottom: 7px; }
+.cell .seg { flex: 0 1 auto; width: 60%; min-width: 0; }
+
+/* Ajustes: ícone em círculo + hairline a partir do texto */
+.group.ics .cell { position: relative; border-top: 0; min-height: 54px; }
+.group.ics .cell + .cell::before { content: ""; position: absolute; top: 0; left: 56px; right: 0; border-top: .5px solid var(--sep); }
+.kt { display: flex; flex-direction: column; white-space: normal; }
+.kt small { font-size: 13px; line-height: 18px; color: var(--label2); }
+
+/* Pagamentos: herói grande com respiro; barra antes da legenda recebido/pendente */
+.pg .mon { margin: 6px 0 14px; }
+.pg .mon .circ { background: none; color: var(--accent); }
+.hero { display: flex; flex-direction: column; padding: 28px 0 24px; border-bottom: .5px solid var(--sep); }
+.hero .big { margin-top: 4px; }
+.hero .cap { font-size: 13px; margin-top: 4px; }
+.hero .bar2 { order: 1; height: 6px; border-radius: 3px; margin-top: 20px; background: var(--fill3); }
+.hero .split { order: 2; margin-top: 14px; }
+.hero .note { order: 3; }
+.split div::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--fill3); margin: 0 6px 1px 0; }
+.split .ok::before { background: var(--ok); }
+.split b { line-height: 25px; }
+.late-box { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 14px; padding: 14px 16px; margin-top: 20px; border-radius: 14px; }
+.late-box .ic { width: 32px; height: 32px; }
+.sec h2 { margin: 30px 0 4px; }
+.row.place { min-height: 64px; padding-top: 8px; padding-bottom: 8px; }
+.row.place .amt { font-weight: 600; }
+/* Pagamentos: "cai …" e "trabalhado …" empilhados (antes quebravam com um "·" solto no início da linha) */
+.when:has(.w2) { flex-direction: column; align-items: flex-start; gap: 0; }
+/* Por local: nome e total na 1ª linha; contagem e recebido ocupam a largura toda na 2ª (sem quebrar) */
+.row.place { grid-template-rows: auto auto; row-gap: 1px; }
+.row.place > span:nth-child(2) { display: contents; }
+.row.place .bar { grid-row: 1 / 3; } .row.place .ttl { grid-column: 2; grid-row: 1; } .row.place .amt { grid-column: 3; grid-row: 1; }
+.row.place .where { grid-column: 2 / 4; grid-row: 2; white-space: nowrap; }
+.status-line.warn { color: var(--label2); } /* "Falta: …" é orientação, não erro: vermelho fica só para atrasado e apagar */
+/* chip selecionado: acento suave + texto no acento + ✓ (menos peso que o bloco sólido; a cor do local continua no ponto) */
+.chip[aria-pressed="true"], .chip.s[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.chip[aria-pressed="true"] i { background: var(--pc); }
+
+/* R6 (Pintora, correção 3): chevron na célula Local — affordance de seleção; o select continua o alvo inteiro */
+.cell .v select + svg { color: var(--label3); flex: none; margin-left: -2px; }
+
+/* ---- R6 · Monoco (acabamento, parecer r1 gpt-5.6-sol high; r6/PARECER_MONOCO.md) ---- */
+.chev { color: var(--label3); }                                   /* M1: affordance legível nos dois temas */
+.late-box .ic { color: var(--on-accent); }                        /* M2: "!" escuro sobre o coral claro do tema escuro */
+body.grouped .nav .circ { background: var(--cell); }              /* M3: círculo visível sobre o fundo agrupado claro */
+.lt h1 { font-size: 34px; line-height: 41px; }                    /* M5: Large title 34/41 (DESIGN.md §2) */
+.group.ics a[href="#/locais"] .v .dot:nth-of-type(n+6) { display: none; } /* M6: no máximo 5 amostras; o contador diz o total */
+.notice { margin: 16px 20px 0; }                                  /* M7: gutter de 20 px como o resto da tela */
+.late-box { gap: 12px; padding: 12px 16px; border-radius: 12px; } /* M8: malha de 4 px e raio 12 */
+.ghead { padding: 24px 4px 8px; } .mlabel { padding: 24px 20px 8px; } /* M9: ritmo 24/8 */
+.gl > .empty { padding: 16px 4px; }                               /* M10: eixo de 20 px no estado vazio (16 do .gl + 4) */
+.hd h1, .kv .k { min-width: 0; overflow-wrap: anywhere; }         /* M11: quebra defensiva para textos longos */
+/* M12 (harness TC-14 a 390×844): a página de detalhes do candidato B ficou 56 px mais alta e "Apagar" (744–798) caía sob a barra flutuante (770) —
+   mesma armadilha já registrada no G2.1. Devolve 40 px sem mexer nas linhas de 48 px: Apagar termina em 758, 12 px acima da barra. */
+.hd { margin: 12px 0 16px; } .meta { padding-bottom: 16px; } .sect { padding: 12px 0; } .del { margin-top: 12px; }

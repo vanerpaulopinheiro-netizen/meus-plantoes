@@ -87,13 +87,13 @@ export function csvPreview(text, data, opts) {
     if (!end) return invalid.push({ line, reason: `fim inválido: "${cell('end')}"` });
     if (end <= start) return invalid.push({ line, reason: 'fim antes do início' });
     if (cents == null || cents < 0) return invalid.push({ line, reason: `valor inválido: "${cell('value')}"` });
-    if (!placeName) return invalid.push({ line, reason: 'sem local' });
     const paid = cell('paid'), ex = cell('expected'); /* m2: data fornecida e inválida invalida a linha (não é descartada em silêncio) */
     if (paid && !isDateKey(paid)) return invalid.push({ line, reason: `recebido em inválido: "${paid}"` });
     if (ex && !isDateKey(ex)) return invalid.push({ line, reason: `previsão inválida: "${ex}"` });
-    const k = normTitle(placeName), place = byName.get(k) || byShort.get(k); let placeId = place?.id;
-    if (!place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, color: cell('color'), count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; }
-    parsed.push({ id: uid(), title, place: placeId, start, end, minutes: minutesOf(start, end), amount_cents: cents, note: unFormula(cell('notes')), paid_at: paid || null, expected_on: ex || null, line, newPlace: place ? null : placeName });
+    /* R6: sem local é válido (place: null); nome que não existe vira local novo só com confirmação */
+    const k = placeName ? normTitle(placeName) : null, place = k ? byName.get(k) || byShort.get(k) : null; let placeId = place?.id ?? null;
+    if (k && !place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, color: cell('color'), count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; }
+    parsed.push({ id: uid(), title, place: placeId, start, end, minutes: minutesOf(start, end), amount_cents: cents, note: unFormula(cell('notes')), paid_at: paid || null, expected_on: ex || null, line, newPlace: k && !place ? placeName : null });
   });
   return finishPreview(classifyGroups(parsed, key3, s => byKey3.get(key3(s)) || null, () => undefined), invalid, newPlaces, { header: rows[0], total: rows.length - 1 });
 }
@@ -189,9 +189,8 @@ export function icsPreview(text, data) {
     const uidRaw = g('UID'), own = uidRaw.match(/^(.+)@meus-plantoes$/); const summary = g('SUMMARY') || 'Plantão';
     const placeName = g('X-MP-PLACE') || g('LOCATION') || (summary.includes(' · ') ? summary.split(' · ').pop() : '');
     const title = summary.includes(' · ') ? summary.split(' · ').slice(0, -1).join(' · ') : summary;
-    if (!placeName) return invalid.push({ line: n, reason: 'sem local (LOCATION)' });
-    const k = normTitle(placeName), place = byName.get(k) || byShort.get(k); let placeId = place?.id;
-    if (!place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; }
+    const k = placeName ? normTitle(placeName) : null, place = k ? byName.get(k) || byShort.get(k) : null; let placeId = place?.id ?? null; /* R6: sem LOCATION = sem local */
+    if (k && !place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; }
     const centsRaw = g('X-MP-AMOUNT-CENTS'); const cents = /^\d{1,10}$/.test(centsRaw) ? (safeCents(+centsRaw) ?? 0) : 0; /* B1: inteiro seguro dentro do teto; fora disso = sem valor */
     parsed.push({ id: uid(), ext_uid: uidRaw || null, title, place: placeId, start: st.iso, end: en.iso, minutes: minutesOf(st.iso, en.iso), amount_cents: cents, note: cents || own ? '' : (g('DESCRIPTION') ? g('DESCRIPTION').slice(0, 200) : '') /* DESCRIPTION vira observação só em evento externo sem valor; o nosso já existe aqui */, paid_at: isDateKey(g('X-MP-PAID')) ? g('X-MP-PAID') : null, expected_on: isDateKey(g('X-MP-EXPECTED')) ? g('X-MP-EXPECTED') : null, line: n, newPlace: place ? null : placeName, noAmount: !cents, tzUnknown: st.tzUnknown || en.tzUnknown || null });
   });

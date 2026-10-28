@@ -61,8 +61,9 @@ export const decimalTxt = c => (c / 100).toFixed(2);
 
 /* ---------- previsão de recebimento (regra do local) ---------- */
 export const PALETTE = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8', 'w9', 'w10']; /* R4: 10 cores (pedido do dono 27/10); hex em app.js PAL e design/tokens.json */
-export function ruleDateFor(rule, k) { return rule.kind === 'days_after' ? addDays(k, rule.days) : addMonths(k, 1, rule.day); }
-export function ruleTxtFor(rule) { return rule.kind === 'days_after' ? `${rule.days} dias após o plantão` : `dia ${rule.day} do mês seguinte`; }
+/* R6 (adendo R1.1): plantão sem local não tem regra — a previsão é a informada pelo usuário, nunca inventada */
+export function ruleDateFor(rule, k) { return !rule ? null : rule.kind === 'days_after' ? addDays(k, rule.days) : addMonths(k, 1, rule.day); }
+export function ruleTxtFor(rule) { return !rule ? 'sem local: previsão informada por você' : rule.kind === 'days_after' ? `${rule.days} dias após o plantão` : `dia ${rule.day} do mês seguinte`; }
 export const validRule = r => !!r && (r.kind === 'days_after' ? Number.isInteger(r.days) && r.days >= 0 && r.days <= 366 : r.kind === 'fixed_day' && Number.isInteger(r.day) && r.day >= 1 && r.day <= 31);
 
 /* ---------- coortes (regras normativas do SPEC §2) ---------- */
@@ -72,7 +73,7 @@ export function cohortOf(shifts, ym, by) {
   const list = shifts.filter(s => key(s).startsWith(ym));
   const t = { count: list.length, minutes: 0, total: 0, received: 0, pending: 0, byPlace: {}, list };
   for (const s of list) {
-    const k = s.paid_at ? 'received' : 'pending', b = t.byPlace[s.place] ||= { count: 0, total: 0, received: 0, pending: 0 };
+    const k = s.paid_at ? 'received' : 'pending', b = t.byPlace[s.place || ''] ||= { count: 0, total: 0, received: 0, pending: 0 }; /* '' = sem local (R6) */
     t.minutes += s.minutes; t.total += s.amount_cents; t[k] += s.amount_cents; b.count++; b.total += s.amount_cents; b[k] += s.amount_cents;
   }
   return t;
@@ -102,7 +103,7 @@ export function scopeTargets(shifts, seriesId, occ, scope) {
 /* ---------- formulário de plantão ---------- */
 export function validateForm(f) {
   const e = {};
-  if (!f.title.trim()) e.title = 'título'; if (!f.place) e.place = 'local'; if (!isDateKey(f.date)) e.date = 'data';
+  if (!f.title.trim()) e.title = 'título'; if (!f.place && !isDateKey(f.expected)) e.expected = 'previsão de recebimento (sem local, informe a data)'; if (!isDateKey(f.date)) e.date = 'data';
   if (!isTimeHM(f.start) || !isTimeHM(f.end)) e.time = 'horário'; else if (f.start === f.end) e.time = 'horário (início igual ao fim)';
   const c = parseCents(f.amount); if (c == null || c <= 0) e.amount = 'valor';
   if (f.expected && !isDateKey(f.expected)) e.expected = 'previsão';
@@ -115,8 +116,10 @@ export function repDates(f) { const { freq, interval } = seriesFreq(f.repeat); r
 /* monta o plantão de um formulário para a data k; `first` = ocorrência que leva previsão sobrescrita e recebimento; `rule` = regra do local */
 export function mkShift(f, k, first, rule) {
   const endK = toMin(f.end) <= toMin(f.start) ? addDays(k, 1) : k; let mins = toMin(f.end) - toMin(f.start); if (mins <= 0) mins += 1440;
-  return { title: f.title.trim(), place: f.place, start: isoLocal(k, f.start), end: isoLocal(endK, f.end), minutes: mins, amount_cents: parseCents(f.amount),
-    expected_on: first && f.expOverride && f.expected ? f.expected : ruleDateFor(rule, k), paid_at: first && f.paid ? f.paidAt : null, note: (f.note || '').trim() };
+  /* sem regra (sem local): a 1ª ocorrência leva a data informada; as repetições ficam à mesma distância do plantão (dito no formulário) */
+  const off = isDateKey(f.date) && isDateKey(f.expected) ? diffDays(f.date, f.expected) : 0;
+  return { title: f.title.trim(), place: f.place || null, start: isoLocal(k, f.start), end: isoLocal(endK, f.end), minutes: mins, amount_cents: parseCents(f.amount),
+    expected_on: rule ? (first && f.expOverride && f.expected ? f.expected : ruleDateFor(rule, k)) : (first && isDateKey(f.expected) ? f.expected : addDays(k, off)), paid_at: first && f.paid ? f.paidAt : null, note: (f.note || '').trim() };
 }
 
 /* ---------- identidade e duplicidade na importação (SPEC §3) ---------- */
@@ -146,11 +149,11 @@ export function validateDataset(d) {
     else if (occurrences(se.freq, se.interval, se.starts_on, se.until).length > MAX_OCC) push(`série ${se.id}: período longo demais`); /* M4 */ if (!Array.isArray(se.exdates) || se.exdates.some(x => !isDateKey(x))) push(`série ${se.id}: datas puladas inválidas`);
     if (typeof se.label !== 'string' || !se.label.trim() || se.label.length > 80) push(`série ${se.id}: rótulo ausente`);
     if (!se.overrides || typeof se.overrides !== 'object' || Array.isArray(se.overrides) || Object.entries(se.overrides).some(([k, o]) => !isDateKey(k) || !o || typeof o !== 'object' || !isTimeHM(o.start) || !isTimeHM(o.end))) push(`série ${se.id}: exceções (overrides) inválidas`);
-    if (se.tpl) { if (!se.tpl || typeof se.tpl !== 'object' || !P.has(se.tpl.place) || !isTimeHM(se.tpl.start) || !isTimeHM(se.tpl.end) || safeCents(se.tpl.amount_cents) == null || typeof se.tpl.title !== 'string' || !se.tpl.title.trim()) push(`série ${se.id}: modelo embutido inválido`); } else if (!T.has(se.template)) push(`série ${se.id}: modelo inexistente`);
+    if (se.tpl) { if (!se.tpl || typeof se.tpl !== 'object' || (se.tpl.place != null && !P.has(se.tpl.place)) || !isTimeHM(se.tpl.start) || !isTimeHM(se.tpl.end) || safeCents(se.tpl.amount_cents) == null || typeof se.tpl.title !== 'string' || !se.tpl.title.trim()) push(`série ${se.id}: modelo embutido inválido`); } else if (!T.has(se.template)) push(`série ${se.id}: modelo inexistente`);
     if (!optBool(se.sample) || !optIso(se.created_at)) push(`série ${se.id}: campos auxiliares inválidos`);
   }
   for (const s of d.shifts) {
-    if (!P.has(s.place)) push(`plantão ${s.id}: local inexistente`);
+    if (s.place != null && !P.has(s.place)) push(`plantão ${s.id}: local inexistente`); /* null = sem local (R6) */
     if (!isIsoLocal(s.start) || !isIsoLocal(s.end)) push(`plantão ${s.id}: data/hora inválida`); else if (s.end <= s.start) push(`plantão ${s.id}: fim antes do início`); else if (Number.isInteger(s.minutes) && s.minutes !== minutesOf(s.start, s.end)) push(`plantão ${s.id}: duração não bate com início e fim`);
     if (safeCents(s.amount_cents) == null) push(`plantão ${s.id}: valor inválido`);
     if (!isDateKey(s.expected_on)) push(`plantão ${s.id}: previsão inválida`); if (s.paid_at != null && !isDateKey(s.paid_at)) push(`plantão ${s.id}: data de recebimento inválida`);

@@ -51,20 +51,21 @@ async function reloadFromOtherTab(reason) {
 }
 async function checkOtherTab() { if (!db || !committer || committer.state !== 'saved') return; try { const m = await readMeta(db); if ((m?.rev || 0) > committer.savedRev) await reloadFromOtherTab('refresh'); } catch (e) { } }
 const UNKNOWN_PLACE = { id: '?', name: '(local removido)', short: '?', color: 'w1', rule: DEFAULT_RULE, archived: true };
-const P = id => S.places[id] || UNKNOWN_PLACE;
+const NO_PLACE = { id: null, name: 'Sem local', short: '—', color: null, rule: null, archived: false }; /* R6: vínculo nulo, nunca um local fictício */
+const P = id => id ? S.places[id] || UNKNOWN_PLACE : NO_PLACE;
 const places = () => Object.values(S.places).filter(p => !p.archived);
 const templates = () => S.templates.filter(t => !t.archived);
 const byId = id => S.shifts.find(s => s.id === id);
 const seriesById = id => S.series.find(x => x.id === id);
 const tplById = id => S.templates.find(t => t.id === id);
 const tplOf = se => se.tpl || tplById(se.template) || { title: 'Plantão', place: Object.keys(S.places)[0], start: '07:00', end: '19:00', amount_cents: 0 };
-const pc = id => `--pc:${(PAL[P(id).color] || PAL.w1)[isDark() ? 1 : 0]}`;
+const pc = id => id ? `--pc:${(PAL[P(id).color] || PAL.w1)[isDark() ? 1 : 0]}` : '--pc:var(--label3)'; /* sem local: marca neutra */
 const pcKey = key => `--pc:${(PAL[key] || PAL.w1)[isDark() ? 1 : 0]}`;
-const ruleDate = (pid, k) => ruleDateFor(P(pid).rule, k);
+const ruleDate = (pid, k) => pid ? ruleDateFor(P(pid).rule, k) : null;
 const ruleTxt = pid => ruleTxtFor(P(pid).rule);
 const cohort = (ym, by) => cohortOf(S.shifts, ym, by);
 const overdue = () => overdueOf(S.shifts, TODAY);
-const mkShift = (f, k, first) => mkShiftCore(f, k, first, P(f.place).rule);
+const mkShift = (f, k, first) => mkShiftCore(f, k, first, f.place ? P(f.place).rule : null);
 function selfCheck() { /* só com os dados de exemplo (que trazem os totais esperados) */
   const D = window.PLANTOES_SAMPLE; if (!S.meta.sample_loaded || !D?.expected) return [];
   const bad = [];
@@ -96,7 +97,7 @@ function onSaveState(st) {
 }
 function saveCell() {
   const st = S.save || { state: 'saved' }, t = st.state === 'saving' ? ['Gravando…', ''] : st.state === 'error' ? [`Não gravado${st.error ? ` (${esc(String(st.error.name || st.error.message || st.error)).slice(0, 60)})` : ''}`, 'late'] : ['Gravado neste aparelho', 'ok'];
-  return `<div class="cell" id="save-state"><span class="k">Gravação</span><span class="v ${t[1]}">${t[0]}${st.state === 'error' ? ` <button class="textb" data-act="retry-save">Tentar de novo</button>` : ''}</span></div>`;
+  return `<div class="cell" id="save-state"><span class="k">${S.view === 'settings' ? sic('disk', 'ok') : ''}Gravação</span><span class="v ${t[1]}">${t[0]}${st.state === 'error' ? ` <button class="textb" data-act="retry-save">Tentar de novo</button>` : ''}</span></div>`;
 }
 
 /* ---------- ícones ---------- */
@@ -113,8 +114,12 @@ const I = {
   more: '<circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/>',
   trash: '<path d="M4.5 7h15M10 4h4M6.5 7l1 12.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5l1-12.5M10 11v6M14 11v6"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
-  down: '<path d="M5 9l7 7 7-7"/>', daycal: '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="16" cy="15" r="1.3" fill="currentColor"/>',
+  down: '<path d="M5 9l7 7 7-7"/>', sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+  info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.01"/>', tpl: '<rect x="7" y="7" width="13" height="13" rx="2.5"/><path d="M4 15.5V6.5A2.5 2.5 0 0 1 6.5 4h9"/>',
+  dots: '<circle cx="7" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="17" cy="12" r="2" fill="currentColor"/>',
+  cloud: '<path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.6 4.5 4.5 0 0 0 7 18.5z"/><path d="M12 11v5M9.8 13.8L12 16l2.2-2.2"/>', disk: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>', daycal: '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="16" cy="15" r="1.3" fill="currentColor"/>',
 };
+const sic = (n, tone = '') => `<span class="ico ${tone}">${ic(n, 17, 2)}</span>`; /* R6-B: ícone em círculo suave (Ajustes) */
 const ic = (n, s = 22, w = 1.8) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${I[n]}</svg>`;
 
 /* ---------- T01 calendário ---------- */
@@ -126,7 +131,7 @@ function viewCal() {
   for (let i = lead; i > 0; i--) cells.push(addDays(ym + '-01', -i));
   for (let d = 1; d <= dim(y, m); d++) cells.push(`${ym}-${pad(d)}`);
   while (cells.length < 42) cells.push(addDays(cells[cells.length - 1], 1));
-  const wk = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB']; if (ws) wk.push(wk.shift());
+  const wk = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']; if (ws) wk.push(wk.shift());
   const empty = !S.shifts.length && !places().length;
   return `
   <header class="nav">
@@ -146,15 +151,15 @@ function backupNotice() {
   if (!S.shifts.length) return ''; const lb = S.meta.last_backup_at, days = lb ? diffDays(lb.slice(0, 10), TODAY) : null;
   const sc = syncLoad(), sd = sc?.last_ok_at ? diffDays(sc.last_ok_at.slice(0, 10), TODAY) : null; /* R5: com o servidor em dia, o lembrete de arquivo some */
   if (sd != null && sd <= 2) return '';
-  if (sd != null) return `<div class="gl" style="padding-bottom:0"><div class="group" style="margin-top:10px;background:var(--fill)"><a class="cell" href="#/dados"><span class="k" style="flex:1 1 auto;white-space:normal;font-size:15px">${ic('alert', 16, 2.2)} Backup no servidor sem envio há ${sd} dias.</span><span class="v" style="font-size:15px">Ver ${ic('chev', 16, 2)}</span></a></div></div>`;
+  if (sd != null) return `<a class="notice" href="#/dados"><span class="ico">${ic('cloud', 17, 2)}</span><span class="nt">Backup no servidor sem envio há ${sd} dias.</span><span class="na">Ver ${ic('chev', 14, 2.2)}</span></a>`;
   if (lb && days <= 7) return '';
   /* linha tocável de 44 px (alvo inteiro), no componente de lista aprovado; some por 7 dias após cada backup */
-  return `<div class="gl" style="padding-bottom:0"><div class="group" style="margin-top:10px;background:var(--fill)"><a class="cell" href="#/dados"><span class="k" style="flex:1 1 auto;white-space:normal;font-size:15px">${ic('alert', 16, 2.2)} ${lb ? `Sem backup há ${days} dias.` : 'Você ainda não fez backup dos seus plantões.'}</span><span class="v" style="font-size:15px">Fazer backup ${ic('chev', 16, 2)}</span></a></div></div>`;
+  return `<a class="notice" href="#/dados"><span class="ico">${ic('cloud', 17, 2)}</span><span class="nt">${lb ? `Sem backup há ${days} dias.` : 'Você ainda não fez backup dos seus plantões.'}</span><span class="na">Fazer backup ${ic('chev', 14, 2.2)}</span></a>`;
 }
 function firstRun() {
   return `<div class="gl"><section class="first" aria-labelledby="fr-t"><h2 id="fr-t">Seus plantões, só neste aparelho</h2>
-    <p>Comece cadastrando um local (hospital, UPA, clínica) com a regra de recebimento; depois registre os plantões pelo "+". Também dá para importar uma planilha ou ver o app com dados de exemplo. Já usava o app em outro endereço ou aparelho? Restaure o seu backup em “Importar planilha ou backup”.</p>
-    <div class="acts"><a class="btn p" href="#/local/novo" style="display:flex;align-items:center;justify-content:center">Cadastrar um local</a><a class="btn" href="#/dados" style="display:flex;align-items:center;justify-content:center">Importar planilha ou backup</a><button class="btn" data-act="sample">Carregar dados de exemplo</button></div></section></div>`;
+    <p>Registre o primeiro plantão pelo "+" — o local é opcional. Cadastrar locais (hospital, UPA, clínica) com a regra de recebimento deixa a previsão automática. Também dá para importar uma planilha ou ver o app com dados de exemplo. Já usava o app em outro endereço ou aparelho? Restaure o seu backup em “Importar planilha ou backup”.</p>
+    <div class="acts"><a class="btn p" href="#/novo/${S.sel}" style="display:flex;align-items:center;justify-content:center">Novo plantão</a><a class="btn" href="#/local/novo" style="display:flex;align-items:center;justify-content:center">Cadastrar um local</a><a class="btn" href="#/dados" style="display:flex;align-items:center;justify-content:center">Importar planilha ou backup</a><button class="btn" data-act="sample">Carregar dados de exemplo</button></div></section></div>`;
 }
 function dayCell(k, inMonth) {
   const d = +k.slice(8, 10), list = inMonth ? dayShifts(k) : [];
@@ -180,7 +185,7 @@ function shiftRow(s, when) {
     : `<button class="act pay" data-act="pay" data-id="${s.id}">${ic('check', 22, 2.4)}<span>Recebi</span></button>`}<button class="act rm" data-act="delete" data-id="${s.id}">${ic('trash', 22, 2)}<span>Apagar</span></button>
     <div class="sws" data-swipe><button class="row" data-act="open" data-id="${s.id}" style="${pc(s.place)}" aria-label="${esc(`${s.title}, ${p.name}, ${t0(s)} às ${t1(s)}${night(s) ? ' do dia seguinte' : ''}, ${brl(s.amount_cents)}`)}">
     <span class="bar"></span>
-    <span class="info"><span class="when">${when}</span><span class="ttl">${esc(s.title)}</span><span class="where"><span class="sg">${esc(p.short)}</span> · ${esc(p.name)}</span></span>
+    <span class="info"><span class="when">${when}</span><span class="ttl">${esc(s.title)}</span><span class="where">${s.place ? `<span class="sg">${esc(p.short)}</span> · ${esc(p.name)}` : '<span class="nolocal">Sem local</span>'}</span></span>
     <span class="right"><span class="amt">${brl(s.amount_cents)}</span><span class="st ${st.k}">${st.h}</span></span>
     <span class="chev">${ic('chev', 16, 2)}</span></button><button class="mbtn" data-act="more" data-id="${s.id}" aria-haspopup="dialog" aria-label="${esc(`Mais ações de ${s.title}, ${p.name}, ${dm(day(s))}`)}">${ic('more', 22)}</button></div></li>`;
 }
@@ -197,9 +202,9 @@ function dayPanel(k) {
 /* ---------- T02 detalhes ---------- */
 function viewDetail(id) {
   const s = byId(id); if (!s) return `<header class="nav"><div class="l"><a class="circ" href="#/calendario" aria-label="Voltar">${ic('left')}</a></div><h1>Plantão</h1><div class="r"></div></header><p class="empty">Plantão não encontrado.</p>`;
-  const p = P(s.place), se = s.series && seriesById(s.series), byRule = s.expected_on === ruleDate(s.place, day(s));
-  const sit = s.paid_at ? `<span class="v ok">Recebido em ${dmy(s.paid_at)}</span>` : s.expected_on < TODAY ? `<span class="v late">Atrasado há ${pl(diffDays(s.expected_on, TODAY), 'dia', 'dias')}</span>`
-    : `<span class="v">${diffDays(TODAY, s.expected_on) === 0 ? 'Cai hoje' : `Previsto · faltam ${pl(diffDays(TODAY, s.expected_on), 'dia', 'dias')}`}</span>`;
+  const p = P(s.place), se = s.series && seriesById(s.series), byRule = !!s.place && s.expected_on === ruleDate(s.place, day(s));
+  const sit = s.paid_at ? `<span class="v sdot ok">Recebido em ${dmy(s.paid_at)}</span>` : s.expected_on < TODAY ? `<span class="v sdot late">Atrasado há ${pl(diffDays(s.expected_on, TODAY), 'dia', 'dias')}</span>`
+    : `<span class="v sdot pend">${diffDays(TODAY, s.expected_on) === 0 ? 'Cai hoje' : `Previsto · faltam ${pl(diffDays(TODAY, s.expected_on), 'dia', 'dias')}`}</span>`;
   return `
   <header class="nav">
     <div class="l"><a class="circ" href="#/calendario/${day(s)}" aria-label="Voltar ao calendário">${ic('left')}</a></div>
@@ -210,15 +215,16 @@ function viewDetail(id) {
     <div class="hd"><span class="bar"></span><h1>${esc(s.title)}</h1></div>
     <div class="meta">
       <span class="d">${ic('daycal', 20)} <span>${dayFull(day(s))}</span></span>
-      <span class="num">${t0(s)} ${night(s) ? '→' : '–'} ${t1(s)}${night(s) ? ` · termina ${WD[dow(endDay(s))]}, ${dmy(endDay(s))}` : ''}</span>
-      <span>${hrs(s.minutes)}${night(s) ? ' · vira a madrugada' : ''}</span>
+      <span class="ml num">${ic('clock', 18, 2)} <span>${t0(s)} ${night(s) ? '→' : '–'} ${t1(s)} · ${hrs(s.minutes)}</span></span>
+      ${night(s) ? `<span class="ml mo">${ic('moon', 18, 2)} <span>termina ${WD[dow(endDay(s))]}, ${dmy(endDay(s))} · vira a madrugada</span></span>` : ''}
       <span class="note">Conta como trabalho de ${monthOf(day(s))}${night(s) ? ' (dia do início)' : ''}.</span>
     </div>
-    <div class="sect"><div class="kv"><span class="k">${ic('pin', 20)} ${esc(p.name)}</span><span class="v tagp"><span class="dot"></span>${esc(p.short)}</span></div></div>
+    ${s.place ? `<div class="sect"><div class="kv"><span class="k">${ic('pin', 20)} ${esc(p.name)}</span><span class="v tagp"><span class="dot"></span>${esc(p.short)}</span></div></div>`
+      : `<div class="sect"><div class="kv"><span class="k">${ic('pin', 20)} <span class="nolocal">Sem local</span></span><a class="textb" href="#/editar/${s.id}">Vincular local</a></div></div>`}
     <div class="sect">
       <div class="kv"><span class="k">Valor</span><span class="v strong num">${s.amount_cents ? brl(s.amount_cents) : '<span class="late">a preencher</span>'}</span></div>
       <div class="kv"><span class="k">Previsão de recebimento</span><span class="v num">${WD[dow(s.expected_on)]}, ${dmy(s.expected_on)}</span></div>
-      <p class="note">${byRule ? `Regra de ${esc(p.name)}: ${ruleTxt(s.place)}.` : 'Previsão ajustada só neste plantão.'} Entra em “cai em ${monthOf(s.expected_on)}”.</p>
+      <p class="note">${byRule ? `Regra de ${esc(p.name)}: ${ruleTxt(s.place)}.` : s.place ? 'Previsão ajustada só neste plantão.' : 'Sem local: previsão informada por você.'} Entra em “cai em ${monthOf(s.expected_on)}”.</p>
       <div class="kv"><span class="k">Situação</span>${sit}</div>
     </div>
     <div class="sect">
@@ -234,11 +240,11 @@ function viewDetail(id) {
 
 /* ---------- T03 formulário de plantão ---------- */
 const newForm = (date, tplId) => { const t = tplId && tplById(tplId); return { editId: null, date, title: t ? t.title : '', place: t ? t.place : (places().length === 1 ? places()[0].id : ''), start: t ? t.start : '', end: t ? t.end : '', amount: t ? centsTxt(t.amount_cents) : '', expected: '', expOverride: false, paid: false, paidAt: TODAY, repeat: 'none', until: '', note: '', tpl: tplId || '' }; };
-const formFrom = s => ({ editId: s.id, date: day(s), title: s.title, place: s.place, start: t0(s), end: t1(s), amount: s.amount_cents ? centsTxt(s.amount_cents) : '', expected: s.expected_on, expOverride: s.expected_on !== ruleDate(s.place, day(s)), paid: !!s.paid_at, paidAt: s.paid_at || TODAY, repeat: 'none', until: '', note: s.note || '', tpl: '' });
+const formFrom = s => ({ editId: s.id, date: day(s), title: s.title, place: s.place, start: t0(s), end: t1(s), amount: s.amount_cents ? centsTxt(s.amount_cents) : '', expected: s.expected_on, expOverride: !s.place || s.expected_on !== ruleDate(s.place, day(s)), paid: !!s.paid_at, paidAt: s.paid_at || TODAY, repeat: 'none', until: '', note: s.note || '', tpl: '' });
 const validate = f => { const e = validateForm(f); if (f.place && !S.places[f.place]) e.place = 'local'; return e; };
 function viewForm() {
   const f = S.form, ed = !!f.editId, e = validate(f), ok = !Object.keys(e).length;
-  const exp = f.place && f.date && S.places[f.place] ? (f.expOverride ? f.expected : ruleDate(f.place, f.date)) : '';
+  const exp = f.place && S.places[f.place] ? (f.expOverride ? f.expected : (isDateKey(f.date) ? ruleDate(f.place, f.date) : '')) : (f.expected || '');
   const [stCls, stHtml] = fragStatus(f); const tp = templates(); const opts = places().concat(f.place && S.places[f.place]?.archived ? [S.places[f.place]] : []);
   return `
   <header class="nav">
@@ -251,25 +257,27 @@ function viewForm() {
     <div class="ghead">Plantão</div>
     <div class="group">
       <label class="cell plain"><input name="title" value="${esc(f.title)}" placeholder="Título do plantão" autocomplete="off" aria-label="Título"></label>
-      <label class="cell"><span class="k">Local</span><span class="v"><span class="dot" id="f-dot" style="${f.place && S.places[f.place] ? pc(f.place) : 'display:none'}"></span><select name="place"><option value="">Escolher</option>${opts.map(p => `<option value="${p.id}"${f.place === p.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></span></label>
+      <label class="cell"><span class="k">Local</span><span class="v"><span class="dot" id="f-dot" style="${f.place && S.places[f.place] ? pc(f.place) : 'display:none'}"></span><select name="place"><option value="">Sem local</option>${opts.map(p => `<option value="${p.id}"${f.place === p.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new">Novo local…</option></select>${ic('chev', 16, 2)}</span></label>
     </div>
-    <p class="gfoot">${opts.length ? 'A cor e a regra de recebimento vêm do local.' : `Nenhum local cadastrado ainda. <a href="#/local/novo">Cadastrar um local</a>`}</p>
+    <p class="gfoot">${f.place && S.places[f.place] ? 'A cor e a regra de recebimento vêm do local.' : 'Sem local: marca neutra e previsão de recebimento informada por você. “Novo local…” abre o cadastro e volta para este formulário.'}</p>
+    <div class="ghead">Quando</div>
     <div class="group">
       <label class="cell"><span class="k">Data</span><input class="num" type="date" name="date" value="${f.date}"></label>
       <label class="cell"><span class="k">Começa</span><input class="num" type="time" name="start" value="${f.start}"></label>
       <label class="cell"><span class="k">Termina</span><input class="num" type="time" name="end" value="${f.end}"></label>
     </div>
     <div id="f-night" style="display:contents">${fragNight(f)}</div>
+    <div class="ghead">Pagamento</div>
     <div class="group">
       <label class="cell"><span class="k">Valor</span><span class="v" style="gap:4px"><span>R$</span><input name="amount" inputmode="decimal" placeholder="0,00" value="${esc(f.amount)}" style="width:110px"></span></label>
-      <label class="cell"><span class="k">Previsto para</span><input class="num" type="date" name="expected" value="${exp}"${f.place && f.date ? '' : ' disabled'}></label>
+      <label class="cell"><span class="k">Previsto para</span><input class="num" type="date" name="expected" value="${exp}"${isDateKey(f.date) ? '' : ' disabled'}></label>
     </div>
     <p class="gfoot" id="f-exp">${fragExp(f)}</p>
     <div class="group">
       <div class="cell"><span class="k">Já recebido</span><button type="button" class="sw" role="switch" aria-checked="${f.paid}" data-act="fpaid" aria-label="Já recebido" style="margin-left:auto"></button></div>
       ${f.paid ? `<label class="cell"><span class="k">Recebido em</span><input class="num" type="date" name="paidAt" value="${f.paidAt}"></label>` : ''}
     </div>
-    ${ed ? '' : `<div class="group">
+    ${ed ? '' : `<div class="ghead">Repetição</div><div class="group">
       <label class="cell"><span class="k">Repetir</span><select name="repeat">${Object.entries(REP).map(([v, t]) => `<option value="${v}"${f.repeat === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
       <div id="f-until" style="display:contents">${fragUntil(f)}</div>
     </div>
@@ -285,7 +293,7 @@ function fragNight(f) {
     ? `<p class="gfoot night">${ic('moon', 12, 2)} Termina no dia seguinte${isDateKey(f.date) ? ` (${wdm(addDays(f.date, 1))})` : ''} às ${f.end} · ${hrs(toMin(f.end) - toMin(f.start) + 1440)} · conta como trabalho de ${isDateKey(f.date) ? dm(f.date) : 'hoje'}.</p>`
     : `<p class="gfoot">${hrs(toMin(f.end) - toMin(f.start))} · termina no mesmo dia.</p>`;
 }
-function fragExp(f) { const p = f.place && S.places[f.place]; return p ? (f.expOverride ? `Pela regra de ${esc(p.name)} seria ${isDateKey(f.date) ? dmy(ruleDate(f.place, f.date)) : '—'}. Alterar aqui vale só para este plantão.` : `Regra de ${esc(p.name)}: ${ruleTxt(f.place)}. Alterar aqui vale só para este plantão.`) : 'Escolha o local para calcular a previsão.'; }
+function fragExp(f) { const p = f.place && S.places[f.place]; return p ? (f.expOverride ? `Pela regra de ${esc(p.name)} seria ${isDateKey(f.date) ? dmy(ruleDate(f.place, f.date)) : '—'}. Alterar aqui vale só para este plantão.` : `Regra de ${esc(p.name)}: ${ruleTxt(f.place)}. Alterar aqui vale só para este plantão.`) : 'Sem local: informe quando espera receber — nenhuma data é inventada.' + (f.repeat && f.repeat !== 'none' ? ' As repetições ficam à mesma distância do plantão.' : ''); }
 function fragUntil(f) { return f.repeat !== 'none' ? `<label class="cell"><span class="k">Até</span><input class="num" type="date" name="until" value="${f.until}"></label>` : ''; }
 function fragRep(f) { if (!(f.repeat !== 'none' && isDateKey(f.until) && isDateKey(f.date) && f.until >= f.date)) return ''; const ds = repDates(f); return `<p class="gfoot">${pl(ds.length, 'plantão', 'plantões')}: ${ds.slice(0, 4).map(dm).join(', ')}${ds.length > 4 ? ` … ${dm(ds[ds.length - 1])}` : ''}.</p>`; }
 function fragStatus(f) { const e = validate(f), ok = !Object.keys(e).length; return [ok ? 'ok' : 'warn', ok ? `${ic('check', 14, 2.4)} Pronto para salvar` : `${ic('alert', 14, 2.2)} Falta: ${Object.values(e).join(', ')}`]; }
@@ -295,7 +303,7 @@ function refreshForm() {
   set('f-night', fragNight(f)); set('f-exp', fragExp(f)); set('f-rep', fragRep(f));
   if (!!form.querySelector('[name="until"]') !== (f.repeat !== 'none')) set('f-until', fragUntil(f));
   const dot = document.getElementById('f-dot'); if (dot) dot.style.cssText = f.place && S.places[f.place] ? pc(f.place) : 'display:none';
-  const ex = form.querySelector('[name="expected"]'); if (ex && document.activeElement !== ex) { ex.disabled = !(f.place && isDateKey(f.date) && S.places[f.place]); const v = f.place && isDateKey(f.date) && S.places[f.place] ? (f.expOverride ? f.expected : ruleDate(f.place, f.date)) : ''; if (ex.value !== v) ex.value = v; }
+  const ex = form.querySelector('[name="expected"]'); if (ex && document.activeElement !== ex) { ex.disabled = !isDateKey(f.date); const v = f.place && S.places[f.place] ? (f.expOverride ? f.expected : (isDateKey(f.date) ? ruleDate(f.place, f.date) : '')) : (f.expected || ''); if (ex.value !== v) ex.value = v; }
   const [cls, html] = fragStatus(f), st = document.getElementById('f-status'); if (st) { st.className = 'status-line ' + cls; st.innerHTML = html; }
   const sv = document.querySelector('[data-act="save"]'); if (sv) { if (cls === 'ok') sv.removeAttribute('aria-disabled'); else sv.setAttribute('aria-disabled', 'true'); }
   for (const el of form.querySelectorAll('[aria-invalid]')) if ((el.value || '').trim()) el.removeAttribute('aria-invalid');
@@ -305,7 +313,7 @@ function readForm() {
   const el = document.getElementById('f'); if (!el) return S.form;
   const fd = new FormData(el), f = S.form;
   for (const k of ['title', 'place', 'date', 'start', 'end', 'amount', 'expected', 'paidAt', 'repeat', 'until', 'note']) if (fd.has(k)) f[k] = fd.get(k);
-  if (fd.has('expected') && f.place && isDateKey(f.date) && S.places[f.place]) f.expOverride = f.expected !== ruleDate(f.place, f.date) && !!f.expected;
+  if (fd.has('expected')) f.expOverride = f.place && isDateKey(f.date) && S.places[f.place] ? f.expected !== ruleDate(f.place, f.date) && !!f.expected : true;
   return f;
 }
 function submitForm() {
@@ -324,7 +332,7 @@ function submitForm() {
   let se = null;
   if (f.repeat !== 'none') {
     const { freq, interval } = seriesFreq(f.repeat);
-    se = { id: uid(), tpl: { title: f.title.trim(), place: f.place, start: f.start, end: f.end, amount_cents: parseCents(f.amount) }, freq, interval, starts_on: f.date, until: f.until, label: seriesLabel(f.repeat, f.date), exdates: [], overrides: {}, created_at: nowIso() };
+    se = { id: uid(), tpl: { title: f.title.trim(), place: f.place || null, start: f.start, end: f.end, amount_cents: parseCents(f.amount), ...(f.place ? {} : { exp_days: diffDays(f.date, f.expected) }) }, freq, interval, starts_on: f.date, until: f.until, label: seriesLabel(f.repeat, f.date), exdates: [], overrides: {}, created_at: nowIso() };
     S.series.push(se);
   }
   const made = repDates(f).map((k, i) => ({ id: uid(), template: f.tpl || null, series: se ? se.id : null, ...mkShift(f, k, i === 0), updated_at: nowIso() }));
@@ -385,11 +393,11 @@ function scopeSheet(se) {
 function viewPay() {
   const ym = S.pay, mon = monthOf(ym + '-01'), y = ym.slice(0, 4), c = cohort(ym, S.cohort), od = overdue();
   const pct = c.total ? Math.round(c.received / c.total * 100) : 0, cash = S.cohort === 'cash';
-  const up = c.list.filter(s => !s.paid_at && !(s.expected_on < TODAY) && (S.filter === 'all' || s.place === S.filter)).sort((a, b) => (cash ? a.expected_on.localeCompare(b.expected_on) : a.start.localeCompare(b.start)));
-  const got = c.list.filter(s => s.paid_at && (S.filter === 'all' || s.place === S.filter)).sort((a, b) => a.paid_at.localeCompare(b.paid_at));
-  const lateIn = od.filter(s => S.filter === 'all' || s.place === S.filter);
+  const up = c.list.filter(s => !s.paid_at && !(s.expected_on < TODAY) && (S.filter === 'all' || (s.place || 'none') === S.filter)).sort((a, b) => (cash ? a.expected_on.localeCompare(b.expected_on) : a.start.localeCompare(b.start)));
+  const got = c.list.filter(s => s.paid_at && (S.filter === 'all' || (s.place || 'none') === S.filter)).sort((a, b) => a.paid_at.localeCompare(b.paid_at));
+  const lateIn = od.filter(s => S.filter === 'all' || (s.place || 'none') === S.filter);
   const paidIn = cohortOf(S.shifts, ym, 'paid');
-  const fplaces = places().concat(Object.keys(c.byPlace).filter(id => S.places[id]?.archived).map(id => S.places[id]));
+  const fplaces = places().concat(Object.keys(c.byPlace).filter(id => S.places[id]?.archived).map(id => S.places[id])), noPlace = !!c.byPlace['']; /* R6: grupo "Sem local" */
   return `
   <div class="lt"><h1>Pagamentos</h1></div>
   <div class="pg">
@@ -404,13 +412,13 @@ function viewPay() {
       <p class="note" style="margin-top:10px">Caixa de ${mon}: ${brl(paidIn.total)} efetivamente recebidos (${pl(paidIn.count, 'plantão', 'plantões')}), pela data do recebimento.</p>
     </section>
     ${lateIn.length ? `<div class="late-box"><span class="ic">!</span><span><b>${pl(lateIn.length, 'recebimento atrasado', 'recebimentos atrasados')}</b><small class="num">${brl(sum(lateIn))} · ${esc(lateIn[0].title)} · ${esc(P(lateIn[0].place).short)} · previsto ${dm(lateIn[0].expected_on)}${lateIn.length > 1 ? ' e outros' : ''}</small></span><button class="textb" data-act="pay" data-id="${lateIn[0].id}">Recebi</button></div>` : ''}
-    <div class="chips" style="margin-top:14px"><button class="chip s" data-act="filter" data-id="all" aria-pressed="${S.filter === 'all'}">Todos os locais</button>${fplaces.map(p => `<button class="chip s" data-act="filter" data-id="${p.id}" aria-pressed="${S.filter === p.id}" style="${pc(p.id)}"><i></i>${esc(p.short)}</button>`).join('')}</div>
+    <div class="chips" style="margin-top:14px"><button class="chip s" data-act="filter" data-id="all" aria-pressed="${S.filter === 'all'}">Todos os locais</button>${fplaces.map(p => `<button class="chip s" data-act="filter" data-id="${p.id}" aria-pressed="${S.filter === p.id}" style="${pc(p.id)}"><i></i>${esc(p.short)}</button>`).join('')}${noPlace ? `<button class="chip s" data-act="filter" data-id="none" aria-pressed="${S.filter === 'none'}" style="${pc(null)}"><i></i>Sem local</button>` : ''}</div>
     <section class="sec"><h2>${cash ? 'Próximos a cair' : 'A receber'} <span class="num">${brl(sum(up))}</span></h2>
-      ${up.length ? `<ul class="rows">${up.map(s => shiftRow(s, cash ? `<span class="num">cai ${wdm(s.expected_on)}</span><span>· trabalhado ${dm(day(s))}</span>` : undefined)).join('')}</ul>` : `<p class="empty" style="padding-left:0">Nada pendente em ${mon}.</p>`}
-      ${got.length ? `<button class="more" data-act="got">${S.showGot ? ic('down', 14, 2) : ic('chev', 14, 2)} Já recebidos ${cash ? `que caíam em ${mon}` : `de ${mon}`} (${got.length}) · ${brl(sum(got))}</button>${S.showGot ? `<ul class="rows">${got.map(s => shiftRow(s, `<span class="num">recebido ${wdm(s.paid_at)}</span><span>· previsto ${dm(s.expected_on)}</span>`)).join('')}</ul>` : ''}` : ''}
+      ${up.length ? `<ul class="rows">${up.map(s => shiftRow(s, cash ? `<span class="num">cai ${wdm(s.expected_on)}</span><span class="w2">trabalhado ${dm(day(s))}</span>` : undefined)).join('')}</ul>` : `<p class="empty" style="padding-left:0">Nada pendente em ${mon}.</p>`}
+      ${got.length ? `<button class="more" data-act="got">${S.showGot ? ic('down', 14, 2) : ic('chev', 14, 2)} Já recebidos ${cash ? `que caíam em ${mon}` : `de ${mon}`} (${got.length}) · ${brl(sum(got))}</button>${S.showGot ? `<ul class="rows">${got.map(s => shiftRow(s, `<span class="num">recebido ${wdm(s.paid_at)}</span><span class="w2">previsto ${dm(s.expected_on)}</span>`)).join('')}</ul>` : ''}` : ''}
     </section>
     <section class="sec"><h2>Por local <span>${cash ? `cai em ${mon}` : `trabalhado em ${mon}`}</span></h2>
-      <ul class="rows">${Object.entries(c.byPlace).sort((a, b) => b[1].total - a[1].total).map(([pid, b]) => `<li><button class="row place" data-act="filter" data-id="${pid}" style="${pc(pid)}"><span class="bar"></span><span><span class="ttl">${esc(P(pid).name)}</span><span class="where num">${pl(b.count, 'plantão', 'plantões')} · recebido ${brl(b.received)}</span></span><span class="amt">${brl(b.total)}</span></button></li>`).join('')}</ul>
+      <ul class="rows">${Object.entries(c.byPlace).sort((a, b) => b[1].total - a[1].total).map(([pid, b]) => `<li><button class="row place" data-act="filter" data-id="${pid || 'none'}" style="${pc(pid || null)}"><span class="bar"></span><span><span class="ttl">${esc(P(pid || null).name)}</span><span class="where num">${pl(b.count, 'plantão', 'plantões')} · recebido ${brl(b.received)}</span></span><span class="amt">${brl(b.total)}</span></button></li>`).join('')}</ul>
     </section>
   </div>`;
 }
@@ -422,29 +430,29 @@ function viewSettings() {
   <div class="lt"><h1>Ajustes</h1></div>
   <div class="gl">
     <div class="ghead">Aparência</div>
-    <div class="group"><div class="cell"><span class="k">Tema</span><div class="seg" role="group" aria-label="Tema">${[['light', 'Claro'], ['dark', 'Escuro'], ['system', 'Sistema']].map(([v, l]) => `<button data-act="theme" data-id="${v}" aria-pressed="${t === v}">${l}</button>`).join('')}</div></div></div>
+    <div class="group ics"><div class="cell"><span class="k">${sic('sun')}Tema</span><div class="seg" role="group" aria-label="Tema">${[['light', 'Claro'], ['dark', 'Escuro'], ['system', 'Sistema']].map(([v, l]) => `<button data-act="theme" data-id="${v}" aria-pressed="${t === v}">${l}</button>`).join('')}</div></div></div>
     <p class="gfoot">“Sistema” acompanha o modo claro/escuro do iPhone.</p>
     <div class="ghead">Plantões</div>
-    <div class="group">
-      <a class="cell" href="#/locais"><span class="k">Locais</span><span class="v">${places().map(p => `<span class="dot" style="${pc(p.id)}"></span>`).join('')} ${places().length} ${ic('chev', 16, 2)}</span></a>
-      <a class="cell" href="#/modelos"><span class="k">Modelos de plantão</span><span class="v">${templates().length} ${ic('chev', 16, 2)}</span></a>
-      <a class="cell" href="#/recorrencias"><span class="k">Recorrências</span><span class="v">${S.series.length} ${ic('chev', 16, 2)}</span></a>
-      <a class="cell" href="#/lixeira"><span class="k">Lixeira</span><span class="v">${S.trash.length} ${ic('chev', 16, 2)}</span></a>
-      <div class="cell"><span class="k">Semana começa</span><div class="seg" role="group" aria-label="Primeiro dia da semana">${[[0, 'Domingo'], [1, 'Segunda']].map(([v, l]) => `<button data-act="week" data-id="${v}" aria-pressed="${(S.meta.week_start || 0) === v}">${l}</button>`).join('')}</div></div>
-      <div class="cell"><span class="k">Calendário</span><div class="seg" role="group" aria-label="Marcação dos plantões no calendário">${[['pontos', 'Pontos'], ['siglas', 'Siglas']].map(([v, l]) => `<button data-act="calmode" data-id="${v}" aria-pressed="${S.calMode === v}">${l}</button>`).join('')}</div></div>
+    <div class="group ics">
+      <a class="cell" href="#/locais"><span class="k">${sic('pin', 'ok')}Locais</span><span class="v">${places().map(p => `<span class="dot" style="${pc(p.id)}"></span>`).join('')} ${places().length} ${ic('chev', 16, 2)}</span></a>
+      <a class="cell" href="#/modelos"><span class="k">${sic('tpl')}Modelos de plantão</span><span class="v">${templates().length} ${ic('chev', 16, 2)}</span></a>
+      <a class="cell" href="#/recorrencias"><span class="k">${sic('rep')}Recorrências</span><span class="v">${S.series.length} ${ic('chev', 16, 2)}</span></a>
+      <a class="cell" href="#/lixeira"><span class="k">${sic('trash', 'mute')}Lixeira</span><span class="v">${S.trash.length} ${ic('chev', 16, 2)}</span></a>
+      <div class="cell"><span class="k">${sic('cal', 'mute')}Semana começa</span><div class="seg" role="group" aria-label="Primeiro dia da semana">${[[0, 'Domingo'], [1, 'Segunda']].map(([v, l]) => `<button data-act="week" data-id="${v}" aria-pressed="${(S.meta.week_start || 0) === v}">${l}</button>`).join('')}</div></div>
+      <div class="cell"><span class="k">${sic('dots', 'mute')}Calendário</span><div class="seg" role="group" aria-label="Marcação dos plantões no calendário">${[['pontos', 'Pontos'], ['siglas', 'Siglas']].map(([v, l]) => `<button data-act="calmode" data-id="${v}" aria-pressed="${S.calMode === v}">${l}</button>`).join('')}</div></div>
     </div>
     <p class="gfoot">“Siglas” mostra o local em cada dia, sem depender da cor.</p>
     <div class="ghead">Seus dados</div>
-    <div class="group">
-      <a class="cell" href="#/dados"><span class="k">Backup, exportar e importar</span><span class="v">${lb ? `backup ${dm(lb.slice(0, 10))}` : 'sem backup'} ${ic('chev', 16, 2)}</span></a>
+    <div class="group ics">
+      <a class="cell" href="#/dados"><span class="k">${sic('cloud', 'ok')}<span class="kt">Backup, exportar e importar<small>${lb ? `backup ${dm(lb.slice(0, 10))}` : 'sem backup'}</small></span></span><span class="v">${ic('chev', 16, 2)}</span></a>
       ${saveCell()}
     </div>
     <p class="gfoot">${syncLoad() ? 'Sem conta: os plantões ficam neste aparelho e uma cópia cifrada vai para o seu servidor. Sem a frase-senha ninguém lê.' : 'Sem conta: os plantões ficam só neste aparelho. O backup é um arquivo seu ou, se você ativar, uma cópia cifrada no seu servidor.'}</p>
     <div class="ghead">Sobre</div>
-    <div class="group">
-      <div class="cell"><span class="k">Versão</span><span class="v">${esc(APP_VERSION)}</span></div>
-      ${S.update ? `<button class="cell accent" data-act="update">Atualizar para a nova versão</button>` : ''}
-      <a class="cell" href="#/privacidade"><span class="k">Privacidade</span><span class="v">${ic('chev', 16, 2)}</span></a>
+    <div class="group ics">
+      <div class="cell"><span class="k">${sic('info', 'mute')}Versão</span><span class="v">${esc(APP_VERSION)}</span></div>
+      ${S.update ? `<button class="cell accent" data-act="update"><span class="k">${sic('down')}Atualizar para a nova versão</span></button>` : ''}
+      <a class="cell" href="#/privacidade"><span class="k">${sic('lock', 'mute')}Privacidade</span><span class="v">${ic('chev', 16, 2)}</span></a>
     </div>
   </div>`;
 }
@@ -457,7 +465,7 @@ function viewPrivacy() {
 }
 function viewPlaces() {
   const act = places(), arch = Object.values(S.places).filter(p => p.archived);
-  const cell = p => `<a class="cell" href="#/local/${p.id}" style="${pc(p.id)}"><span class="k"><span class="dot"></span>${esc(p.name)}</span><span class="v">${esc(p.short)} · ${ruleTxt(p.id)} ${ic('chev', 16, 2)}</span></a>`;
+  const cell = p => `<a class="cell" href="#/local/${p.id}" style="${pc(p.id)}"><span class="k"><span class="dot"></span><span class="kt">${esc(p.name)}<small>${esc(p.short)} · ${ruleTxt(p.id)}</small></span></span><span class="v">${ic('chev', 16, 2)}</span></a>`;
   return `<header class="nav"><div class="l"><a class="circ" href="#/ajustes" aria-label="Voltar">${ic('left')}</a></div><h1>Locais</h1><div class="r"><a class="circ" href="#/local/novo" aria-label="Novo local">${ic('plus', 22, 2)}</a></div></header>
   <div class="gl">${act.length ? `<div class="group" style="margin-top:12px">${act.map(cell).join('')}</div>` : '<p class="empty">Nenhum local. Toque em “+” para cadastrar o primeiro.</p>'}
   <p class="gfoot">Cada local tem sigla, cor e regra de recebimento. A cor vale nos dois temas.</p>
@@ -469,7 +477,7 @@ function validatePlace(f) { const e = {}; if (!f.name.trim()) e.name = 'nome'; i
 function viewPlaceForm() {
   const f = S.pform, ed = !!f.id, e = validatePlace(f), ok = !Object.keys(e).length, n = ed ? S.shifts.filter(s => s.place === f.id).length : 0;
   return `
-  <header class="nav"><div class="l"><a class="textb" href="#/locais">Cancelar</a></div><h1>${ed ? 'Editar local' : 'Novo local'}</h1><div class="r"><button class="textb b" data-act="psave"${ok ? '' : ' aria-disabled="true"'}>Salvar</button></div></header>
+  <header class="nav"><div class="l"><a class="textb" href="${S.formKeep ? (S.formKeep.editId ? '#/editar/' + S.formKeep.editId : '#/novo/' + S.formKeep.date) : '#/locais'}">Cancelar</a></div><h1>${ed ? 'Editar local' : 'Novo local'}</h1><div class="r"><button class="textb b" data-act="psave"${ok ? '' : ' aria-disabled="true"'}>Salvar</button></div></header>
   <form id="pf" class="gl" novalidate>
     <div class="ghead">Local</div>
     <div class="group">
@@ -497,7 +505,9 @@ function savePlace() {
   const p = f.id ? S.places[f.id] : (S.places[uid()] = { id: null }); if (!p.id) p.id = Object.keys(S.places).find(k => S.places[k] === p);
   const before = JSON.stringify(p); Object.assign(p, { name: f.name.trim(), short: f.short.trim().toUpperCase(), color: f.color, rule, archived: !!f.archived, updated_at: nowIso() });
   S.toast = { msg: `${esc(p.name)} ${f.id ? 'atualizado' : 'cadastrado'}.`, undo: f.id ? () => Object.assign(p, JSON.parse(before)) : () => { delete S.places[p.id]; } };
-  S.pform = null; persist(); go('#/locais');
+  S.pform = null; persist();
+  if (S.formKeep) { S.formKeep.place = p.id; S.formKeep.expOverride = !!S.formKeep.editId; go(S.formKeep.editId ? '#/editar/' + S.formKeep.editId : '#/novo/' + S.formKeep.date); } /* volta ao formulário com o local novo escolhido; em edição a previsão existente não muda */
+  else go('#/locais');
 }
 function viewTemplates() {
   const act = templates(), arch = S.templates.filter(t => t.archived);
@@ -518,7 +528,7 @@ function viewTplForm() {
     <div class="ghead">Modelo</div>
     <div class="group">
       <label class="cell plain"><input name="title" value="${esc(f.title)}" placeholder="Título (ex.: Noturno 12h)" autocomplete="off" aria-label="Título do modelo"></label>
-      <label class="cell"><span class="k">Local</span><span class="v"><span class="dot" style="${f.place && S.places[f.place] ? pc(f.place) : 'display:none'}"></span><select name="place"><option value="">Escolher</option>${places().map(p => `<option value="${p.id}"${f.place === p.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></span></label>
+      <label class="cell"><span class="k">Local</span><span class="v"><span class="dot" style="${f.place && S.places[f.place] ? pc(f.place) : 'display:none'}"></span><select name="place"><option value="">Escolher</option>${places().map(p => `<option value="${p.id}"${f.place === p.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select>${ic('chev', 16, 2)}</span></label>
       <label class="cell"><span class="k">Começa</span><input class="num" type="time" name="start" value="${f.start}"></label>
       <label class="cell"><span class="k">Termina</span><input class="num" type="time" name="end" value="${f.end}"></label>
       <label class="cell"><span class="k">Valor</span><span class="v" style="gap:4px"><span>R$</span><input name="amount" inputmode="decimal" placeholder="0,00" value="${esc(f.amount)}" style="width:110px"></span></label>
@@ -602,6 +612,7 @@ function viewImport() {
       <div class="cell"><span class="k">Inválidos (ignorados)</span><span class="v"><span class="badge${pv.invalid.length ? ' warn' : ''}">${pv.invalid.length}</span></span></div>
       ${conf.length ? `<div class="cell"><span class="k">Conflitos</span><span class="v"><span class="badge warn">${conf.length}</span></span></div>` : ''}
       ${noAmt ? `<div class="cell"><span class="k">Sem valor</span><span class="v wrap">${noAmt} entram com R$ 0,00 (valor a preencher; fora das somas)</span></div>` : ''}
+      ${(pv.valid || []).filter(s => !s.place).length ? `<div class="cell"><span class="k">Sem local</span><span class="v wrap">${(pv.valid || []).filter(s => !s.place).length} entram sem local${(pv.valid || []).some(s => !s.place && !s.expected_on) ? ' (previsão pela regra padrão: 30 dias após; ajuste depois)' : ''}</span></div>` : ''}
       ${(pv.valid || []).some(s => s.tzUnknown) ? `<div class="cell"><span class="k">Fuso desconhecido</span><span class="v wrap">${(pv.valid || []).filter(s => s.tzUnknown).length} eventos com fuso não reconhecido: horário tratado como de São Paulo</span></div>` : ''}
     </div>
     ${pv.newPlaces.length ? `<div class="ghead">Locais novos (serão criados)</div><div class="group"><ul class="imp">${pv.newPlaces.map(p => `<li><span>${esc(p.name)}</span><small>${pl(p.count, 'plantão', 'plantões')} · regra padrão: 30 dias após</small></li>`).join('')}</ul></div><p class="gfoot">Depois ajuste sigla, cor e regra em Ajustes › Locais.</p>` : ''}
@@ -634,7 +645,7 @@ function confirmImport() {
   const pv = im.preview, conf = pv.conflicts || [], replace = im.mode === 'replace'; if (!pv.valid?.length && !(replace && conf.length)) return true;
   const createdPlaces = [], map = {}; let ci = Object.keys(S.places).length;
   for (const np of pv.newPlaces) { const id = uid(); const short = (np.name.replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).map(w => w[0] || '').join('').slice(0, 3) || np.name.slice(0, 3)).toUpperCase(); S.places[id] = { id, name: np.name, short, color: PALETTE[ci++ % PALETTE.length], rule: { ...DEFAULT_RULE }, archived: false, updated_at: nowIso() }; map[np.tempId] = id; createdPlaces.push(id); }
-  const made = pv.valid.map(v => { const place = map[v.place] || v.place; const s = { id: uid(), title: v.title, place, start: v.start, end: v.end, minutes: v.minutes, amount_cents: v.amount_cents, expected_on: v.expected_on || ruleDate(place, v.start.slice(0, 10)), paid_at: v.paid_at || null, note: v.note || '', series: null, template: null, imported_at: nowIso(), updated_at: nowIso() }; if (v.ext_uid) s.ext_uid = v.ext_uid; return s; });
+  const made = pv.valid.map(v => { const place = map[v.place] || v.place || null; const s = { id: uid(), title: v.title, place, start: v.start, end: v.end, minutes: v.minutes, amount_cents: v.amount_cents, expected_on: v.expected_on || (place ? ruleDate(place, v.start.slice(0, 10)) : ruleDateFor(DEFAULT_RULE, v.start.slice(0, 10))), /* sem local e sem previsão no arquivo: regra padrão declarada na prévia */ paid_at: v.paid_at || null, note: v.note || '', series: null, template: null, imported_at: nowIso(), updated_at: nowIso() }; if (v.ext_uid) s.ext_uid = v.ext_uid; return s; });
   S.shifts.push(...made); const ids = new Set(made.map(s => s.id));
   const replacedBefore = []; if (replace) for (const c of conf) { const ex = byId(c.existingId); if (!ex) continue; replacedBefore.push([ex, JSON.stringify(ex)]); applyConflict(ex, { ...c.incoming, place: map[c.incoming.place] || c.incoming.place }, nowIso()); }
   const parts = [made.length ? pl(made.length, 'plantão importado', 'plantões importados') : '', replacedBefore.length ? pl(replacedBefore.length, 'plantão atualizado', 'plantões atualizados') : '', createdPlaces.length ? pl(createdPlaces.length, 'local criado', 'locais criados') : ''].filter(Boolean);
@@ -842,11 +853,12 @@ const TAB = { cal: 'cal', detail: 'cal', form: null, series: 'aj', serieslist: '
 function parseHash() { let h = (location.hash || '').replace(/^#\/?/, ''); return h.includes('/') ? h.split('/') : h.split('~'); }
 function route() {
   const [r = 'calendario', a, b] = parseHash();
+  if (!['local', 'novo', 'editar'].includes(r)) S.formKeep = null; /* o formulário guardado só sobrevive à ida e volta do cadastro de local */
   if (!S.keep) S.toast = S.toast?.kind === 'save' ? S.toast : null; S.keep = false; S.sheet = null;
   switch (r) {
     case 'plantao': S.view = 'detail'; S.id = a; break;
-    case 'novo': S.view = 'form'; S.form = newForm(isDateKey(a || '') ? a : S.sel, b); break;
-    case 'editar': { const s = byId(a); S.view = s ? 'form' : 'cal'; if (s) S.form = formFrom(s); break; }
+    case 'novo': S.view = 'form'; S.form = S.formKeep && !S.formKeep.editId ? S.formKeep : newForm(isDateKey(a || '') ? a : S.sel, b); S.formKeep = null; break;
+    case 'editar': { const s = byId(a); S.view = s ? 'form' : 'cal'; if (s) S.form = S.formKeep?.editId === a ? S.formKeep : formFrom(s); S.formKeep = null; break; }
     case 'serie': S.view = 'series'; S.seriesId = a; break;
     case 'recorrencias': S.view = 'serieslist'; break;
     case 'pagamentos': S.view = 'pay'; break;
@@ -931,7 +943,7 @@ const ACT = {
   save() { submitForm(); return true; },
   occ(k) { S.sheet = { occ: k, scope: 'one' }; }, sheetx() { const k = S.sheet?.occ; S.sheet = null; render(false); document.querySelector(`[data-act="occ"][data-id="${k}"]`)?.focus({ preventScroll: true }); return true; },
   restore(k) { const se = seriesById(S.seriesId), tp = tplOf(se), o = se.overrides[k] || {};
-    const s = { id: uid(), template: se.template || null, series: se.id, ...mkShift({ title: tp.title, place: tp.place, start: o.start || tp.start, end: o.end || tp.end, amount: centsTxt(tp.amount_cents), note: '', paid: false }, k, false), updated_at: nowIso() };
+    const s = { id: uid(), template: se.template || null, series: se.id, ...mkShift({ title: tp.title, place: tp.place, start: o.start || tp.start, end: o.end || tp.end, amount: centsTxt(tp.amount_cents), note: '', paid: false, date: k, expected: tp.place ? '' : addDays(k, tp.exp_days || 0) }, k, false), updated_at: nowIso() };
     S.shifts.push(s); se.exdates = se.exdates.filter(x => x !== k); S.toast = { msg: `${dm(k)} restaurado na série.`, undo: () => { S.shifts = S.shifts.filter(x => x !== s); se.exdates.push(k); } }; },
   applyScope() { const se = seriesById(S.seriesId), { occ } = S.sheet, scope = document.querySelector('[name=scope]:checked')?.value || 'one';
     const st = document.getElementById('sc-start').value, en = document.getElementById('sc-end').value, c = parseCents(document.getElementById('sc-amt').value);
@@ -993,6 +1005,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.form?.id === 'f' && t.name === 'place' && t.value === '__new') { t.value = ''; S.formKeep = readForm(); go('#/local/novo'); return; } /* R6: criar local sem perder o formulário em andamento */
   if (t.form?.id === 'f') { readForm(); refreshForm(); } /* F01: atualização no lugar — nenhum re-render durante a edição */
   else if (t.form?.id === 'pf') readPlaceForm(); else if (t.form?.id === 'tf') { readTplForm(); const dot = t.form.querySelector('.dot'); if (dot && t.name === 'place') dot.style.cssText = t.value && S.places[t.value] ? pc(t.value) : 'display:none'; }
   else if (t.name === 'scope' && S.sheet) S.sheet.scope = t.value;
