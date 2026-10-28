@@ -208,7 +208,7 @@ export function stableStringify(v) { if (Array.isArray(v)) return '[' + v.map(st
 export async function sha256Hex(text) { const buf = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)); return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join(''); }
 export const counts = d => ({ places: d.places.length, templates: d.templates.length, series: d.series.length, shifts: d.shifts.length });
 export async function backupMake(data, appVersion, now = new Date()) {
-  const clean = { places: data.places, templates: data.templates, series: data.series, shifts: data.shifts };
+  const clean = structuredClone({ places: data.places, templates: data.templates, series: data.series, shifts: data.shifts }); /* R01-4: instantâneo síncrono antes do await — hash, contagens e dados descrevem o mesmo estado */
   return { schema_version: SCHEMA_VERSION, app: 'meus-plantoes', app_version: appVersion, exported_at: now.toISOString(), counts: counts(clean), sum_cents: clean.shifts.reduce((a, s) => a + s.amount_cents, 0), sha256: await sha256Hex(stableStringify(clean)), data: clean };
 }
 /* valida ANTES de qualquer gravação: schema, hash, contagens, soma, estrutura e referências; devolve {ok, errors, data} */

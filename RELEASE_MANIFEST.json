@@ -1,21 +1,21 @@
 {
  "app": "meus-plantoes",
- "version": "1.0.0+f5b435cca5",
- "built_at": "2026-10-27T21:00:43.652768+00:00",
- "source_commit": "49bbd4fa4f12071838e174adfc7224b76f5a7534",
+ "version": "1.0.0+fea9d083d3",
+ "built_at": "2026-10-28T01:22:57.549620+00:00",
+ "source_commit": "665a012b2436edb022b2399d54ff6d595e1522a7",
  "source_repo": "M:/VKS-DATA/LAB/plantoes-pessoais-20261020 (git local, pasta app/)",
  "public_files": {
   "index.html": {
-   "sha256": "a2b8f8db402886db1ce6ee818cd643e4107b13c624d2eada16a18d9e1259a30c",
-   "bytes": 1521
+   "sha256": "48420b221c37ac816833809a47c54bf3c27e925db64d696885fe74a09abdfcb9",
+   "bytes": 1598
   },
   "styles.css": {
    "sha256": "5d45e0fad19b9b71b1d422029de4d037be8aaae71cd6eef0cb66c362bfbd1fa5",
    "bytes": 27979
   },
   "sw.js": {
-   "sha256": "a7b1f1db490015c0b375b91e2034e030b9fdc1f766e84be2683ecaa3e5ea70a6",
-   "bytes": 1761
+   "sha256": "262ff0103fef8324af9b2c8e96a1a10247b2e3fe1a55e6a731a99ef8614a5eb6",
+   "bytes": 1778
   },
   "manifest.webmanifest": {
    "sha256": "73d7ec3548d22c181124845dcae448719243fc24b490ee6ca2d110f82fbd15f0",
@@ -26,12 +26,12 @@
    "bytes": 25006
   },
   "README.md": {
-   "sha256": "8851ac63829c3a30592946784deb850b3423d2b294ea58f3bd9f46e9935beef5",
-   "bytes": 3743
+   "sha256": "755dbda8ed8fb3115f86a9ace53eb0e8c491f38dc2c2a4dd33d85cd38a56085f",
+   "bytes": 3965
   },
   "src/app.js": {
-   "sha256": "5c289e0955a1ca9a984b86e21f4a6d2c0611ce8ba8898c43b06760ef163e909b",
-   "bytes": 107789
+   "sha256": "a32c292aa7450cd25f7f950e73f850a2ea848ab30dc492419e142dafc34c9adc",
+   "bytes": 125786
   },
   "src/core.js": {
    "sha256": "81d4196953db018abd87b4b7058e9c850e0a2a1997ff4672b511f5aedc2680f0",
@@ -42,11 +42,15 @@
    "bytes": 6773
   },
   "src/codecs.js": {
-   "sha256": "576a7cb0766be47e1da1f1164f0787cb9c0b71f10daee7a724cac84a234fabad",
-   "bytes": 25245
+   "sha256": "184f0b6486fd9a6760747820d87463ed2ad0eeb060da166845daca1ef4768a01",
+   "bytes": 25366
+  },
+  "src/sync.js": {
+   "sha256": "2edf2344f6982c0f535da222a257b255217728ed30f473e42d47a17e13b0efe8",
+   "bytes": 7141
   },
   "src/version.js": {
-   "sha256": "cc6abdb8577b35db016ac612d7750711de5084ca80f4ffbc6e0ae6997dfdf66d",
+   "sha256": "737d206dd2fc15a9398a61f42e69c660bcc6db49eb9c422ad12ee34259f42cdb",
    "bytes": 104
   },
   "icons/icon-192.png": {
@@ -70,7 +74,7 @@
    "bytes": 48256
   }
  },
- "tree_sha256": "bfb96e67fee3e954a002cf986dd72ef0926561e8722a4da4f630ac6ec1f88c7e",
+ "tree_sha256": "065266e564e877beb473a6ea9d7c57f69717b801d5f2b418258251d1865a17fe",
  "notes": [
   "somente arquivos públicos do app; nenhum teste, ferramenta, dado real ou segredo",
   "sample.js = dados fictícios opcionais (Carregar dados de exemplo)",

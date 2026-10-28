@@ -5,6 +5,7 @@ import { TZ, pad, WD, WDL, WDS, cap, addDays, dim, addMonths, dow, diffDays, dm,
 import { openDB, readAll, readMeta, writeAll, createCommitter } from './store.js';
 import { csvExport, csvExportGanhos, csvPreview, icsExport, icsPreview, backupMake, backupVerify, applyConflict } from './codecs.js';
 import { APP_VERSION } from './version.js';
+import { deriveKeys, tagOf, seal, open as openBlob, client as syncClient, step as syncStep, WINDOW_S } from './sync.js';
 
 const Q = new URLSearchParams(location.search);
 const TODAY_FIXED = isDateKey(Q.get('today')) ? Q.get('today') : null; /* testes: ?today=YYYY-MM-DD */
@@ -79,6 +80,7 @@ function persist(keepRestoreUndo = false) {
   if (!keepRestoreUndo && S.meta.restore_undo && !S.clearUndoAt) S.clearUndoAt = (committer?.rev || 0) + 1;
   S.meta.updated_at = nowIso(); const c = committer?.commit(snapshot);
   if (S.toast && !S.toast.kind && c) { S.toastPending = { toast: S.toast, rev: c.rev }; S.toast = null; }
+  return c;
 }
 function onSaveState(st) {
   S.save = st; const el = document.getElementById('save-state'); if (el) el.outerHTML = saveCell();
@@ -89,6 +91,7 @@ function onSaveState(st) {
     if (S.toastPending && st.savedRev >= S.toastPending.rev) { S.toast = S.toastPending.toast; S.toastPending = null; }
     renderToast();
     if (S.reloadWhenSaved) { S.reloadWhenSaved = false; location.reload(); } /* N1: a atualização adiada conclui só com tudo gravado */
+    syncKick(); /* R5: toda gravação durável agenda o backup no servidor */
   }
 }
 function saveCell() {
@@ -140,7 +143,11 @@ function viewCal() {
 }
 /* F12: lembrete honesto de backup, em linha (nunca sobreposto ao conteúdo): só com dados e sem backup há mais de 7 dias */
 function backupNotice() {
-  if (!S.shifts.length) return ''; const lb = S.meta.last_backup_at, days = lb ? diffDays(lb.slice(0, 10), TODAY) : null; if (lb && days <= 7) return '';
+  if (!S.shifts.length) return ''; const lb = S.meta.last_backup_at, days = lb ? diffDays(lb.slice(0, 10), TODAY) : null;
+  const sc = syncLoad(), sd = sc?.last_ok_at ? diffDays(sc.last_ok_at.slice(0, 10), TODAY) : null; /* R5: com o servidor em dia, o lembrete de arquivo some */
+  if (sd != null && sd <= 2) return '';
+  if (sd != null) return `<div class="gl" style="padding-bottom:0"><div class="group" style="margin-top:10px;background:var(--fill)"><a class="cell" href="#/dados"><span class="k" style="flex:1 1 auto;white-space:normal;font-size:15px">${ic('alert', 16, 2.2)} Backup no servidor sem envio há ${sd} dias.</span><span class="v" style="font-size:15px">Ver ${ic('chev', 16, 2)}</span></a></div></div>`;
+  if (lb && days <= 7) return '';
   /* linha tocável de 44 px (alvo inteiro), no componente de lista aprovado; some por 7 dias após cada backup */
   return `<div class="gl" style="padding-bottom:0"><div class="group" style="margin-top:10px;background:var(--fill)"><a class="cell" href="#/dados"><span class="k" style="flex:1 1 auto;white-space:normal;font-size:15px">${ic('alert', 16, 2.2)} ${lb ? `Sem backup há ${days} dias.` : 'Você ainda não fez backup dos seus plantões.'}</span><span class="v" style="font-size:15px">Fazer backup ${ic('chev', 16, 2)}</span></a></div></div>`;
 }
@@ -432,7 +439,7 @@ function viewSettings() {
       <a class="cell" href="#/dados"><span class="k">Backup, exportar e importar</span><span class="v">${lb ? `backup ${dm(lb.slice(0, 10))}` : 'sem backup'} ${ic('chev', 16, 2)}</span></a>
       ${saveCell()}
     </div>
-    <p class="gfoot">Sem conta e sem servidor: os plantões ficam só neste aparelho. O backup é um arquivo seu.</p>
+    <p class="gfoot">${syncLoad() ? 'Sem conta: os plantões ficam neste aparelho e uma cópia cifrada vai para o seu servidor. Sem a frase-senha ninguém lê.' : 'Sem conta: os plantões ficam só neste aparelho. O backup é um arquivo seu ou, se você ativar, uma cópia cifrada no seu servidor.'}</p>
     <div class="ghead">Sobre</div>
     <div class="group">
       <div class="cell"><span class="k">Versão</span><span class="v">${esc(APP_VERSION)}</span></div>
@@ -443,8 +450,8 @@ function viewSettings() {
 }
 function viewPrivacy() {
   return `<header class="nav"><div class="l"><a class="circ" href="#/ajustes" aria-label="Voltar">${ic('left')}</a></div><h1>Privacidade</h1><div class="r"></div></header>
-  <div class="gl priv"><p>Este app não tem conta, não tem servidor e não envia nada pela internet: os plantões, valores e observações ficam gravados só neste aparelho (IndexedDB do navegador) e só saem dele nos arquivos que você mesmo exportar.</p>
-  <p>A política de segurança do próprio app (CSP) bloqueia qualquer conexão fora da origem onde ele está instalado. Não há analytics, nem fontes ou scripts de terceiros.</p>
+  <div class="gl priv"><p>Este app não tem conta: os plantões, valores e observações ficam gravados neste aparelho (IndexedDB do navegador) e só saem dele nos arquivos que você mesmo exportar ou, se você ativar o backup no servidor, como cópia cifrada no aparelho com a sua frase-senha.</p>
+  <p>O backup no servidor vai só para o servidor do dono do app (plantoes-sync.vksos.tech). O servidor guarda texto cifrado e não recebe a frase-senha: sem ela, ninguém lê os dados, nem o servidor. A política de segurança do app (CSP) bloqueia qualquer outra conexão fora da origem onde ele está instalado. Não há analytics, nem fontes ou scripts de terceiros.</p>
   <p>Como o iPhone pode apagar dados de sites sob pressão de espaço, faça backups periódicos (Ajustes › Seus dados). O app avisa quando passam 7 dias sem backup.</p>
   <p>Não registre dados de pacientes nas observações.</p></div>`;
 }
@@ -539,6 +546,7 @@ function viewData() {
   const lb = S.meta.last_backup_at, days = lb ? diffDays(lb.slice(0, 10), TODAY) : null, n = S.shifts.length;
   return `<header class="nav"><div class="l"><a class="circ" href="#/ajustes" aria-label="Voltar">${ic('left')}</a></div><h1>Seus dados</h1><div class="r"></div></header>
   <div class="gl">
+    ${viewSyncGroup()}
     <div class="ghead">Backup completo</div>
     <div class="group">
       <div class="cell"><span class="k">Último backup</span><span class="v ${days != null && days > 7 ? 'late' : ''}">${lb ? `${dmy(lb.slice(0, 10))} ${lb.slice(11, 16)} UTC${days > 7 ? ` · há ${days} dias` : ''}` : 'nunca'}</span></div>
@@ -619,7 +627,10 @@ async function readPicked(kind, file) {
 }
 function confirmImport() {
   const im = S.imp; if (!im || !im.preview) return true;
-  if (im.kind === 'backup') { if (!im.preview.ok) return true; restoreBackup(im.preview.data); return true; }
+  if (im.kind === 'backup') { if (!im.preview.ok) return true; const keys = im.syncKeys, c = restoreBackup(im.preview.data);
+    /* r8 B-01: o backup no servidor só liga depois que a restauração está DURÁVEL; se a gravação falhar, nada é ativado */
+    if (keys) (c ? c.done : Promise.reject(new Error('sem gravação'))).then(() => syncActivate(keys, { created: true }), () => { S.toast = { msg: 'A restauração não foi gravada; o backup no servidor não foi ativado.' }; renderToast(); });
+    return true; }
   const pv = im.preview, conf = pv.conflicts || [], replace = im.mode === 'replace'; if (!pv.valid?.length && !(replace && conf.length)) return true;
   const createdPlaces = [], map = {}; let ci = Object.keys(S.places).length;
   for (const np of pv.newPlaces) { const id = uid(); const short = (np.name.replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).map(w => w[0] || '').join('').slice(0, 3) || np.name.slice(0, 3)).toUpperCase(); S.places[id] = { id, name: np.name, short, color: PALETTE[ci++ % PALETTE.length], rule: { ...DEFAULT_RULE }, archived: false, updated_at: nowIso() }; map[np.tempId] = id; createdPlaces.push(id); }
@@ -636,7 +647,7 @@ function restoreBackup(data) {
   S.places = Object.fromEntries(d.places.map(p => [p.id, p])); S.templates = d.templates; S.series = d.series; S.shifts = d.shifts.filter(s => !s.deleted_at); S.trash = d.shifts.filter(s => !!s.deleted_at);
   S.meta = { ...META_DEFAULT(), ...S.meta, sample_loaded: d.shifts.some(s => s.sample), restore_undo: undo };
   S.imp = null; S.toast = { msg: `Backup restaurado: ${pl(S.shifts.length, 'plantão', 'plantões')}.`, btn: { label: 'Desfazer', act: 'restore-undo' } };
-  S.month = TODAY.slice(0, 7); S.sel = TODAY; persist(true); go('#/calendario');
+  S.month = TODAY.slice(0, 7); S.sel = TODAY; const c = persist(true); go('#/calendario'); return c;
 }
 function undoRestore() {
   const u = S.meta.restore_undo; if (!u) return;
@@ -675,6 +686,154 @@ function removeSample() {
   for (const [id, p] of Object.entries(S.places)) if (p.sample) delete S.places[id];
   S.templates = S.templates.filter(t => !t.sample); S.series = S.series.filter(x => !x.sample); S.shifts = S.shifts.filter(s => !s.sample); S.trash = S.trash.filter(s => !s.sample); S.meta.sample_loaded = false;
   S.toast = { msg: 'Dados de exemplo removidos.' };
+}
+
+/* ---------- backup no servidor (R5_PLAN rev 6 §D) ----------
+   A configuração fica no localStorage (nunca no IndexedDB de dados, nunca num backup); a frase-senha nunca é guardada.
+   Uma volta por aparelho (navigator.locks), sempre sobre o estado DURÁVEL (IndexedDB) e só pela regra única de sync.js. */
+const SYNC_KEY = 'mp-sync';
+const SYNC_URL = (u => u && /^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(u) ? u : 'https://plantoes-sync.vksos.tech')(Q.get('sync'));
+const SYNC_T = SYNC_URL.startsWith('http://127.'), SYNC_WIN = (SYNC_T && +Q.get('syncwin')) || WINDOW_S; /* tempos curtos só com servidor de teste em loopback */
+const SYNC_TIMEOUT = (SYNC_T && +Q.get('synctimeout')) || 45000, SYNC_RETRY = (SYNC_T && +Q.get('syncretry')) || 30000;
+const SYNC_OK = !!(globalThis.crypto?.subtle && globalThis.CompressionStream && navigator.locks);
+const syncLoad = () => { try { return JSON.parse(localStorage.getItem(SYNC_KEY) || 'null'); } catch (e) { return null; } };
+const syncSave = c => { try { const v = JSON.stringify(c); localStorage.setItem(SYNC_KEY, v); return localStorage.getItem(SYNC_KEY) === v; } catch (e) { return false; } }; /* gravação verificada */
+const syncSaveSame = c => syncLoad()?.id === c.id && syncSave(c); /* r8 H-01: a volta nunca recria uma configuração desligada ou trocada */
+let syncDirty = false, syncBusy = false, syncTimer = null, syncFails = 0;
+function syncKick(delay = 3000) { if (!SYNC_OK || !syncLoad()) return; syncDirty = true; clearTimeout(syncTimer); syncTimer = setTimeout(syncRun, delay); }
+function syncLater(ms) { clearTimeout(syncTimer); syncTimer = setTimeout(() => { syncDirty = true; syncRun(); }, ms); }
+async function syncRun() {
+  if (syncBusy) return; syncBusy = true; /* laço único: um gatilho durante a volta só marca dirty e a volta se repete */
+  try {
+    while (syncDirty) {
+      syncDirty = false;
+      const r = await navigator.locks.request('mp-sync', syncOnce);
+      if (!r) break;
+      if (r.again) { syncDirty = true; continue; }
+      if (r.wait != null) { syncLater(Math.max(500, r.wait * 1000)); break; }
+      if (r.retry) { syncLater(SYNC_RETRY * [1, 2, 4, 10][Math.min(syncFails++, 3)]); break; } /* 30 s, 1, 2, 5 min, depois a cada 5 min */
+      syncFails = 0;
+    }
+  } finally { syncBusy = false; }
+}
+const byIdSort = a => [...a].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0)); /* etiqueta independe da ordem de gravação */
+async function syncOnce() {
+  const cfg = syncLoad(); if (!cfg) return null; /* relido sob o lock: duas abas compartilham o mesmo pending */
+  if (!db || !committer || committer.state !== 'saved') return { retry: true, error: 'local' }; /* nunca envia com gravação pendente ou em erro */
+  let r;
+  try {
+    const raw = await readAll(db), b = await backupMake({ places: byIdSort(raw.places), templates: byIdSort(raw.templates), series: byIdSort(raw.series), shifts: byIdSort(raw.shifts) }, APP_VERSION);
+    const snap = { tag: await tagOf(cfg.tagkey, b.sha256), seal: () => seal(cfg.key, b) };
+    S.syncSt = { state: 'sending' }; syncPaint();
+    r = await syncStep(cfg, snap, syncClient(cfg.url, cfg.id, cfg.token, { timeoutMs: SYNC_TIMEOUT }), syncSaveSame, { windowS: SYNC_WIN });
+  } catch (e) { r = { retry: true, error: e.type === 'offline' ? 'offline' : 'server' }; }
+  const needCode = st => ['enroll_bad', 'need_enroll'].includes(st?.error), before = needCode(S.syncSt);
+  S.syncSt = { state: r.done ? 'ok' : r.wait != null ? 'wait' : r.again ? 'sending' : r.retry ? 'retry' : 'error', error: r.error, first: !!cfg.pending && cfg.pending.tag === null };
+  if (S.view === 'data' && before !== needCode(S.syncSt)) render(false); else syncPaint(); /* o campo do código aparece/some com o estado */
+  return r;
+}
+const SYNC_MSG = { offline: 'Sem conexão — envia sozinho ao voltar', server: 'Servidor indisponível — tenta de novo sozinho', rate: 'Servidor ocupado — tenta de novo sozinho', local: 'Aguardando a gravação no aparelho',
+  too_large: 'Grande demais para o servidor — use o backup em arquivo', enroll_bad: 'Código de cadastro incorreto', need_enroll: 'Falta o código de cadastro', vault_gone: 'O servidor não tem mais este backup — desligue e ative de novo',
+  persist: 'Não foi possível guardar o estado do backup neste aparelho', vault_limit: 'O servidor atingiu o limite de backups', auth: 'O servidor recusou a frase-senha' };
+function syncStatus() {
+  const c = syncLoad(), st = S.syncSt || {};
+  if (st.state === 'sending') return ['Conferindo com o servidor…', ''];
+  if (st.state === 'wait') return [st.first ? 'Preparando o primeiro envio…' : 'Conferindo o último envio…', ''];
+  if (st.state === 'retry' || st.state === 'error') return [SYNC_MSG[st.error] || 'Erro no backup do servidor', 'late'];
+  if (c?.last_ok_at) return [`Salvo · versão ${c.last_version} · ${dm(c.last_ok_at.slice(0, 10))} ${new Date(c.last_ok_at).toTimeString().slice(0, 5)}`, 'ok'];
+  return [c?.pending ? 'Preparando o primeiro envio…' : 'Aguardando o primeiro envio', ''];
+}
+function syncPaint() { const el = document.getElementById('sync-state'); if (el) { const [t, k] = syncStatus(); el.className = 'v wrap ' + k; el.textContent = t; } }
+function viewSyncGroup() {
+  const head = '<div class="ghead">Backup no servidor</div>', c = syncLoad(), f = S.syncForm;
+  if (!SYNC_OK) return `${head}<div class="group"><div class="cell"><span class="k">Indisponível neste navegador</span></div></div>`;
+  if (c) {
+    const [t, k] = syncStatus(), vs = S.syncVersions, needCode = ['enroll_bad', 'need_enroll'].includes(S.syncSt?.error);
+    return `${head}<div class="group">
+      <div class="cell"><span class="k">Situação</span><span class="v wrap ${k}" id="sync-state" role="status">${esc(t)}</span></div>${needCode ? '</div>' : ''}
+      ${needCode ? `<form id="sf" class="group" novalidate><label class="cell plain"><input id="sync-code" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Código de cadastro do servidor" aria-label="Código de cadastro do servidor"></label><button class="cell accent" type="submit">Enviar com este código</button></form><div class="group">` : ''}
+      <button class="cell accent" data-act="sync-now">Enviar agora</button>
+      <button class="cell" data-act="sync-versions"><span class="k">Restaurar do servidor</span><span class="v">${ic('chev', 16, 2)}</span></button>
+      ${vs ? (vs.error ? `<div class="cell"><span class="k">Versões</span><span class="v late wrap">${esc(vs.error)}</span></div>` : vs.list.map(v => `<button class="cell" data-act="sync-version" data-id="${v.version}"><span class="k">Versão ${v.version}</span><span class="v num">${dmy(v.saved_at.slice(0, 10))} ${new Date(v.saved_at).toTimeString().slice(0, 5)} ${ic('chev', 16, 2)}</span></button>`).join('')) : ''}
+      <button class="cell danger" data-act="sync-off">Desligar neste aparelho</button></div>
+      <p class="gfoot">Cópia cifrada no aparelho com a sua frase-senha, enviada sozinha a cada alteração. O servidor guarda as versões anteriores (as 30 mais novas e uma por dia por 90 dias).</p>`;
+  }
+  if (!f) return `${head}<div class="group"><button class="cell accent" data-act="sync-start">Ativar backup no servidor</button></div>
+    <p class="gfoot">Uma cópia cifrada dos seus plantões fica no seu servidor e volta para qualquer aparelho com a mesma frase-senha.</p>`;
+  if (f.step === 'busy') return `${head}<div class="group"><div class="cell"><span class="k">${esc(f.msg || 'Preparando…')}</span></div></div>`;
+  if (f.step === 'empty') return `${head}<div class="group"><div class="cell"><span class="k" style="flex:1 1 auto;white-space:normal">Nenhum backup encontrado com essa frase-senha. Se você já tinha backup, confira a frase.</span></div>
+    <button class="cell accent" data-act="sync-new">Começar backup novo</button><button class="cell" data-act="sync-other">Tentar outra frase</button><button class="cell" data-act="sync-cancel">Cancelar</button></div>`;
+  if (f.step === 'exists') return `${head}<div class="group"><div class="cell"><span class="k" style="flex:1 1 auto;white-space:normal">Há um backup no servidor de ${dmy(f.latest.saved_at.slice(0, 10))} ${new Date(f.latest.saved_at).toTimeString().slice(0, 5)}.</span></div>
+    <button class="cell accent" data-act="sync-restore-latest">Restaurar neste aparelho</button>${S.shifts.length || Object.keys(S.places).length ? '<button class="cell" data-act="sync-push">Enviar o deste aparelho como versão nova</button>' : ''}<button class="cell" data-act="sync-cancel">Cancelar</button></div>
+    <p class="gfoot">${S.shifts.length ? 'Enviar o deste aparelho não apaga o do servidor: ele fica no histórico de versões.' : 'Este aparelho está vazio: restaure para continuar.'}</p>`;
+  return `${head}<form id="sf" class="group" novalidate>${f.step === 'code'
+    ? `<label class="cell plain"><input id="sync-code" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Código de cadastro do servidor" aria-label="Código de cadastro do servidor"></label>`
+    : `<label class="cell plain"><input id="sync-p1" type="password" autocomplete="new-password" placeholder="Frase-senha (mínimo 12 caracteres)" aria-label="Frase-senha"></label>
+       <label class="cell plain"><input id="sync-p2" type="password" autocomplete="new-password" placeholder="Repita a frase-senha" aria-label="Repita a frase-senha"></label>`}
+    <button class="cell accent" type="submit">${f.step === 'code' ? 'Ativar' : 'Continuar'}</button><button class="cell" type="button" data-act="sync-cancel">Cancelar</button></form>
+    ${f.err ? `<p class="gfoot late" role="alert">${esc(f.err)}</p>` : ''}
+    <p class="gfoot">${f.step === 'code' ? 'O código aparece no terminal do servidor quando ele é instalado. Só é pedido ao criar o backup.' : 'Sem a frase-senha ninguém recupera os dados — nem o servidor. Guarde-a no app Senhas.'}</p>`;
+}
+const syncBusyForm = msg => { S.syncForm = { ...S.syncForm, step: 'busy', msg }; render(false); };
+async function syncSubmit() {
+  const f = S.syncForm;
+  const live = syncLoad();
+  if (live && !f) { /* backup já ligado: redigitar o código de cadastro */
+    const code = (document.getElementById('sync-code')?.value || '').trim(); if (!code) return;
+    live.enroll = code; if (!syncSave(live)) { S.syncSt = { state: 'error', error: 'persist' }; render(false); return; }
+    S.syncSt = { state: 'sending' }; render(false); syncKick(0); return;
+  }
+  if (!f) return;
+  if (f.step === 'code') {
+    const code = (document.getElementById('sync-code')?.value || '').trim();
+    if (!code) { S.syncForm = { ...f, err: 'Digite o código de cadastro.' }; render(false); return; }
+    return syncActivate(f.keys, { enroll: code });
+  }
+  const p1 = document.getElementById('sync-p1')?.value || '', p2 = document.getElementById('sync-p2')?.value || '';
+  if (p1.normalize('NFC').trim().length < 12) { S.syncForm = { step: 'pass', err: 'A frase-senha precisa de pelo menos 12 caracteres.' }; render(false); return; }
+  if (p1 !== p2) { S.syncForm = { step: 'pass', err: 'As duas frases não são iguais.' }; render(false); return; }
+  syncBusyForm('Preparando… (alguns segundos)');
+  try {
+    const keys = { url: SYNC_URL, ...(await deriveKeys(p1)) }, r = await syncClient(keys.url, keys.id, keys.token, { timeoutMs: SYNC_TIMEOUT }).meta();
+    if (r.status === 200) S.syncForm = { step: 'exists', keys, latest: r.body };
+    else if (r.status === 404) S.syncForm = S.shifts.length || Object.keys(S.places).length ? { step: 'code', keys } : { step: 'empty', keys };
+    else S.syncForm = { step: 'pass', err: `O servidor respondeu ${r.status}. Tente de novo mais tarde.` };
+  } catch (e) { S.syncForm = { step: 'pass', err: e.type === 'offline' ? 'Sem conexão com o servidor. Tente de novo com internet.' : String(e.message || e) }; }
+  render(false);
+}
+/* ativar = criar a configuração com espera de um prazo antes do 1º envio (um PUT de configuração anterior ainda em voo morre antes) */
+async function syncActivate(keys, { enroll = null, created = false } = {}) {
+  try {
+    const r = await syncClient(keys.url, keys.id, keys.token, { timeoutMs: SYNC_TIMEOUT }).meta();
+    if (typeof r.body?.now !== 'number') throw new Error(`o servidor respondeu ${r.status}`);
+    const cfg = { url: keys.url, id: keys.id, token: keys.token, key: keys.key, tagkey: keys.tagkey, pending: { tag: null, not_after: r.body.now + SYNC_WIN }, created: created || r.status === 200, enroll, last_ok_at: null, last_version: null };
+    if (!syncSave(cfg)) throw new Error(SYNC_MSG.persist);
+    S.syncForm = null; S.syncSt = { state: 'wait', first: true }; if (!S.toast) S.toast = { msg: 'Backup no servidor ativado.' };
+    syncKick(0);
+  } catch (e) { S.syncForm = { ...(S.syncForm || {}), step: enroll ? 'code' : 'pass', keys, err: e.type === 'offline' ? 'Sem conexão com o servidor.' : String(e.message || e) }; }
+  if (S.view === 'data') render(false); else renderToast();
+}
+/* restaurar: decifra → backupVerify → a tela de restauração existente; ativação (se vier do fluxo de ativar) só depois de confirmar */
+async function syncRestore(keys, n) {
+  const fromActivation = !syncLoad();
+  if (fromActivation) syncBusyForm('Baixando o backup…');
+  try {
+    const api = syncClient(keys.url, keys.id, keys.token, { timeoutMs: SYNC_TIMEOUT }), r = n == null ? await api.latest() : await api.version(n);
+    if (r.status !== 200) throw new Error(`o servidor respondeu ${r.status}`);
+    const obj = await openBlob(keys.key, r.body.blob), pv = await backupVerify(obj);
+    S.imp = { kind: 'backup', name: `servidor · versão ${r.body.version}`, preview: pv, raw: obj, syncKeys: fromActivation ? keys : null };
+    S.syncVersions = null; if (fromActivation) S.syncForm = null;
+    go('#/importar');
+  } catch (e) {
+    const msg = e.type === 'offline' ? 'Sem conexão com o servidor.' : String(e.message || e);
+    if (fromActivation) { S.syncForm = { ...S.syncForm, step: 'exists', err: msg }; render(false); } else { S.toast = { msg: 'Não foi possível restaurar: ' + msg }; renderToast(); }
+  }
+}
+async function syncListVersions() {
+  const c = syncLoad(); if (!c) return;
+  try { const r = await syncClient(c.url, c.id, c.token, { timeoutMs: SYNC_TIMEOUT }).versions(); S.syncVersions = r.status === 200 ? { list: r.body.versions } : { error: r.status === 404 ? 'Nenhuma versão no servidor ainda.' : `O servidor respondeu ${r.status}.` }; }
+  catch (e) { S.syncVersions = { error: 'Sem conexão com o servidor.' }; }
+  render(false);
 }
 
 /* ---------- roteamento e render ---------- */
@@ -802,6 +961,21 @@ const ACT = {
   'sample-remove'() { removeSample(); persist(); },
   'retry-save'() { committer?.retry(); return true; },
   update() { applyUpdate(); return true; },
+  /* backup no servidor (R5) */
+  'sync-start'() { S.syncForm = { step: 'pass' }; render(false); document.getElementById('sync-p1')?.focus(); return true; },
+  'sync-cancel'() { S.syncForm = null; S.syncVersions = null; render(false); return true; },
+  'sync-submit'() { syncSubmit(); return true; },
+  'sync-new'() { S.syncForm = { ...S.syncForm, step: 'code' }; render(false); document.getElementById('sync-code')?.focus(); return true; },
+  'sync-other'() { S.syncForm = { step: 'pass' }; render(false); return true; },
+  'sync-restore-latest'() { syncRestore(S.syncForm.keys, null); return true; },
+  'sync-push'() { syncActivate(S.syncForm.keys, { created: true }); return true; },
+  'sync-now'() { syncKick(0); return true; },
+  'sync-versions'() { syncListVersions(); return true; },
+  'sync-version'(n) { const c = syncLoad(); if (c) syncRestore(c, +n); return true; },
+  'sync-off'() { /* r8 H-01: pelo mesmo lock da volta — um envio em curso termina antes; depois dele nenhuma gravação recria a configuração */
+    S.syncSt = { state: 'sending' }; syncPaint();
+    navigator.locks.request('mp-sync', () => { try { localStorage.removeItem(SYNC_KEY); } catch (e) { } }).then(() => { clearTimeout(syncTimer); S.syncSt = null; S.syncVersions = null; S.toast = { msg: 'Backup no servidor desligado neste aparelho. Os dados no servidor continuam.' }; render(false); });
+    return true; },
 };
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
@@ -812,7 +986,7 @@ document.addEventListener('click', e => {
   render(false);
   (document.querySelector(`[data-act="${act}"]${b.dataset.id ? `[data-id="${b.dataset.id}"]` : ''}`) || $app).focus({ preventScroll: true });
 });
-document.addEventListener('submit', e => { if (['f', 'pf', 'tf'].includes(e.target.id)) { e.preventDefault(); if (e.target.id === 'f') submitForm(); else if (e.target.id === 'pf') savePlace(); else saveTpl(); } });
+document.addEventListener('submit', e => { if (e.target.id === 'sf') { e.preventDefault(); syncSubmit(); return; } if (['f', 'pf', 'tf'].includes(e.target.id)) { e.preventDefault(); if (e.target.id === 'f') submitForm(); else if (e.target.id === 'pf') savePlace(); else saveTpl(); } });
 document.addEventListener('input', e => {
   const t = e.target; if (t.form?.id === 'f' && ['title', 'amount', 'note'].includes(t.name)) { readForm(); refreshForm(); }
   else if (t.form?.id === 'pf' || t.form?.id === 'tf') { const f = t.form.id === 'pf' ? readPlaceForm() : readTplForm(); const e2 = t.form.id === 'pf' ? validatePlace(f) : validateTpl(f), ok = !Object.keys(e2).length; const st = document.getElementById(t.form.id + '-status'); if (st) { st.className = 'status-line ' + (ok ? 'ok' : 'warn'); st.innerHTML = ok ? `${ic('check', 14, 2.4)} Pronto para salvar` : `${ic('alert', 14, 2.2)} Falta: ${Object.values(e2).join(', ')}`; } const sv = document.querySelector('[data-act="psave"],[data-act="tsave"]'); if (sv) { if (ok) sv.removeAttribute('aria-disabled'); else sv.setAttribute('aria-disabled', 'true'); } if ((t.value || '').trim()) t.removeAttribute('aria-invalid'); }
@@ -952,7 +1126,8 @@ async function boot() {
   if (dbError) onSaveState({ state: 'error', error: dbError, rev: 0, savedRev: 0 });
   const empty = !raw.shifts.length && !raw.places.length;
   if (empty && Q.get('sample')) { try { await loadSample(); persist(); } catch (e) { console.warn(e); } }
-  addEventListener('pagehide', () => committer.flushNow()); document.addEventListener('visibilitychange', () => { if (document.hidden) committer.flushNow(); else { tick(); checkOtherTab(); } }); addEventListener('focus', checkOtherTab);
+  addEventListener('pagehide', () => committer.flushNow()); document.addEventListener('visibilitychange', () => { if (document.hidden) committer.flushNow(); else { tick(); checkOtherTab(); syncKick(); } }); addEventListener('focus', checkOtherTab);
+  addEventListener('online', () => syncKick(1000)); syncKick(1000); /* R5: abertura do app e volta da rede */
   try { S.storage = { supported: !!navigator.storage?.persist, persisted: navigator.storage?.persist ? await navigator.storage.persist() : null }; } catch (e) { S.storage = { supported: true, persisted: null, error: String(e.message || e) }; } /* M5: resultado observável em Seus dados */
   Object.defineProperty(window, '__mp', { enumerable: true, writable: false, configurable: false, value: Object.freeze({
     contract: 'g21-1', today: TODAY, version: APP_VERSION,
@@ -962,7 +1137,7 @@ async function boot() {
     cohort: (ym, by) => { const c = cohort(ym, by); return { count: c.count, total: c.total, received: c.received, pending: c.pending }; },
     overdue: () => sum(overdue()), selfCheck,
     open: () => document.querySelector('li[data-shift][data-open]:not([data-open=""])')?.dataset.shift || null,
-    save: () => ({ state: committer.state, rev: committer.rev, savedRev: committer.savedRev }), idle: () => committer.whenIdle(), trash: () => S.trash.map(s => s.id), meta: () => JSON.parse(JSON.stringify(S.meta)),
+    save: () => ({ state: committer.state, rev: committer.rev, savedRev: committer.savedRev }), sync: () => ({ st: S.syncSt, busy: syncBusy, cfg: (({ key, token, tagkey, ...c }) => c)(syncLoad() || {}) }), idle: () => committer.whenIdle(), trash: () => S.trash.map(s => s.id), meta: () => JSON.parse(JSON.stringify(S.meta)),
   }) });
   route();
   registerSW();

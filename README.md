@@ -1,7 +1,7 @@
 # Meus Plantões — app (B1)
 
-PWA local-first para plantões e recebimentos. Sem conta, sem servidor de dados: tudo fica no aparelho (IndexedDB) e só sai
-nos arquivos que o dono exportar. Base visual e de interação: identidade G2/G2.1 aprovada e congelada em 23/10/2026.
+PWA local-first para plantões e recebimentos. Sem conta: tudo fica no aparelho (IndexedDB) e só sai nos arquivos que o dono
+exportar ou, se ele ativar, como cópia cifrada no aparelho (frase-senha) para o servidor do dono (`../server/`, R5). Base visual e de interação: identidade G2/G2.1 aprovada e congelada em 23/10/2026.
 
 ## Rodar
 
@@ -24,6 +24,7 @@ Abra `http://127.0.0.1:8787/`. Parâmetros só para testes: `?sample=1` (carrega
 | `src/store.js` | IndexedDB + fila única de commits (revisão monotônica, sucesso só em `transaction.complete`, estado "não gravado" com nova tentativa, verificação da revisão na transação contra outra aba) |
 | `src/codecs.js` | CSV escala / CSV com ganhos / ICS sem ou com valores / backup JSON (SHA-256, validação estrita); duplicatas e conflitos na importação |
 | `src/app.js` | interface (telas, gestos G2.1, F01/F02, cadastros, lixeira, portabilidade, PWA) |
+| `src/sync.js` | backup no servidor: PBKDF2 → AES-GCM com gzip, etiqueta HMAC, cliente HTTP e a regra única `step` (R5_PLAN rev 6) |
 | `sw.js` | precache atômico por versão; atualização só com aceite do usuário |
 | `sample.js` | dados de exemplo (fictícios) |
 | `tools/serve.mjs`, `tools/stamp.mjs`, `tools/icons.mjs` | servidor local, carimbo de versão, ícones |
