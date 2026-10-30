@@ -61,6 +61,10 @@ export const decimalTxt = c => (c / 100).toFixed(2);
 
 /* ---------- previsão de recebimento (regra do local) ---------- */
 export const PALETTE = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8', 'w9', 'w10']; /* R4: 10 cores (pedido do dono 27/10); hex em app.js PAL e design/tokens.json */
+export const isColorKey = k => typeof k === 'string' && PALETTE.includes(k);
+/* R7: cor efetiva de um plantão (ou modelo) = cor individual válida > cor do local > neutra (null). Modelo materializado: a cor
+   exibida vem sempre do próprio registro; `series.tpl.color_override` é só a semente de ocorrências novas/restauradas. */
+export function effectiveColor(s, placeOf) { if (isColorKey(s?.color_override)) return s.color_override; const p = s?.place ? placeOf(s.place) : null; return p && isColorKey(p.color) ? p.color : null; }
 /* R6 (adendo R1.1): plantão sem local não tem regra — a previsão é a informada pelo usuário, nunca inventada */
 export function ruleDateFor(rule, k) { return !rule ? null : rule.kind === 'days_after' ? addDays(k, rule.days) : addMonths(k, 1, rule.day); }
 export function ruleTxtFor(rule) { return !rule ? 'sem local: previsão informada por você' : rule.kind === 'days_after' ? `${rule.days} dias após o plantão` : `dia ${rule.day} do mês seguinte`; }
@@ -119,7 +123,8 @@ export function mkShift(f, k, first, rule) {
   /* sem regra (sem local): a 1ª ocorrência leva a data informada; as repetições ficam à mesma distância do plantão (dito no formulário) */
   const off = isDateKey(f.date) && isDateKey(f.expected) ? diffDays(f.date, f.expected) : 0;
   return { title: f.title.trim(), place: f.place || null, start: isoLocal(k, f.start), end: isoLocal(endK, f.end), minutes: mins, amount_cents: parseCents(f.amount),
-    expected_on: rule ? (first && f.expOverride && f.expected ? f.expected : ruleDateFor(rule, k)) : (first && isDateKey(f.expected) ? f.expected : addDays(k, off)), paid_at: first && f.paid ? f.paidAt : null, note: (f.note || '').trim() };
+    expected_on: rule ? (first && f.expOverride && f.expected ? f.expected : ruleDateFor(rule, k)) : (first && isDateKey(f.expected) ? f.expected : addDays(k, off)), paid_at: first && f.paid ? f.paidAt : null, note: (f.note || '').trim(),
+    color_override: isColorKey(f.color) ? f.color : null /* R7: cor individual; '' = herda do local (ou neutra) */ };
 }
 
 /* ---------- identidade e duplicidade na importação (SPEC §3) ---------- */
@@ -142,14 +147,15 @@ export function validateDataset(d) {
   const uniq = (coll, name) => { const seen = new Set(); for (const r of coll) { if (!r || typeof r !== 'object' || Array.isArray(r)) { push(`${name}: registro inválido`); continue; } if (typeof r.id !== 'string' || !ID_RE.test(r.id)) { push(`${name}: id ausente ou inválido${typeof r.id === 'string' ? ` (${r.id.slice(0, 20)})` : ''}`); continue; } if (seen.has(r.id)) push(`${name}: id duplicado ${r.id}`); seen.add(r.id); } return seen; };
   const P = uniq(d.places, 'locais'), T = uniq(d.templates, 'modelos'), SE = uniq(d.series, 'séries'); uniq(d.shifts, 'plantões');
   for (const p of d.places) { if (typeof p.name !== 'string' || !p.name.trim() || p.name.length > 120) push(`local ${p.id}: nome ausente ou longo demais`); if (typeof p.short !== 'string' || !p.short.trim() || p.short.length > 8) push(`local ${p.id}: sigla ausente ou longa demais`); if (!validRule(p.rule)) push(`local ${p.id}: regra de recebimento inválida`); if (!PALETTE.includes(p.color)) push(`local ${p.id}: cor fora da paleta`); if (!optBool(p.archived) || !optBool(p.sample) || !optIso(p.updated_at)) push(`local ${p.id}: campos auxiliares inválidos`); }
-  for (const t of d.templates) { if (!P.has(t.place)) push(`modelo ${t.id}: local inexistente`); if (!isTimeHM(t.start) || !isTimeHM(t.end) || t.start === t.end) push(`modelo ${t.id}: horário inválido`); if (safeCents(t.amount_cents) == null) push(`modelo ${t.id}: valor inválido`); if (typeof t.title !== 'string' || !t.title.trim() || t.title.length > 120) push(`modelo ${t.id}: título ausente ou longo demais`); if (!optBool(t.archived) || !optBool(t.sample)) push(`modelo ${t.id}: campos auxiliares inválidos`); }
+  const optColor = v => v == null || isColorKey(v); /* R7: cor individual opcional (chave da paleta); ausente = herda */
+  for (const t of d.templates) { if (!P.has(t.place)) push(`modelo ${t.id}: local inexistente`); if (!isTimeHM(t.start) || !isTimeHM(t.end) || t.start === t.end) push(`modelo ${t.id}: horário inválido`); if (safeCents(t.amount_cents) == null) push(`modelo ${t.id}: valor inválido`); if (typeof t.title !== 'string' || !t.title.trim() || t.title.length > 120) push(`modelo ${t.id}: título ausente ou longo demais`); if (!optBool(t.archived) || !optBool(t.sample)) push(`modelo ${t.id}: campos auxiliares inválidos`); if (!optColor(t.color_override)) push(`modelo ${t.id}: cor fora da paleta`); }
   for (const se of d.series) {
     if (!['daily', 'weekly', 'monthly', 'yearly'].includes(se.freq)) push(`série ${se.id}: frequência inválida`); if (!Number.isInteger(se.interval) || se.interval < 1 || se.interval > 52) push(`série ${se.id}: intervalo inválido`);
     if (!isDateKey(se.starts_on) || !isDateKey(se.until) || se.until < se.starts_on) push(`série ${se.id}: período inválido`);
     else if (occurrences(se.freq, se.interval, se.starts_on, se.until).length > MAX_OCC) push(`série ${se.id}: período longo demais`); /* M4 */ if (!Array.isArray(se.exdates) || se.exdates.some(x => !isDateKey(x))) push(`série ${se.id}: datas puladas inválidas`);
     if (typeof se.label !== 'string' || !se.label.trim() || se.label.length > 80) push(`série ${se.id}: rótulo ausente`);
-    if (!se.overrides || typeof se.overrides !== 'object' || Array.isArray(se.overrides) || Object.entries(se.overrides).some(([k, o]) => !isDateKey(k) || !o || typeof o !== 'object' || !isTimeHM(o.start) || !isTimeHM(o.end))) push(`série ${se.id}: exceções (overrides) inválidas`);
-    if (se.tpl) { if (!se.tpl || typeof se.tpl !== 'object' || (se.tpl.place != null && !P.has(se.tpl.place)) || !isTimeHM(se.tpl.start) || !isTimeHM(se.tpl.end) || safeCents(se.tpl.amount_cents) == null || typeof se.tpl.title !== 'string' || !se.tpl.title.trim()) push(`série ${se.id}: modelo embutido inválido`); } else if (!T.has(se.template)) push(`série ${se.id}: modelo inexistente`);
+    if (!se.overrides || typeof se.overrides !== 'object' || Array.isArray(se.overrides) || Object.entries(se.overrides).some(([k, o]) => !isDateKey(k) || !o || typeof o !== 'object' || !isTimeHM(o.start) || !isTimeHM(o.end) || !optColor(o.color_override))) push(`série ${se.id}: exceções (overrides) inválidas`); /* R7: toda exceção mantém start/end; cor é opcional */
+    if (se.tpl) { if (!se.tpl || typeof se.tpl !== 'object' || (se.tpl.place != null && !P.has(se.tpl.place)) || !isTimeHM(se.tpl.start) || !isTimeHM(se.tpl.end) || safeCents(se.tpl.amount_cents) == null || typeof se.tpl.title !== 'string' || !se.tpl.title.trim() || !optColor(se.tpl.color_override)) push(`série ${se.id}: modelo embutido inválido`); } else if (!T.has(se.template)) push(`série ${se.id}: modelo inexistente`);
     if (!optBool(se.sample) || !optIso(se.created_at)) push(`série ${se.id}: campos auxiliares inválidos`);
   }
   for (const s of d.shifts) {
@@ -160,6 +166,7 @@ export function validateDataset(d) {
     if (s.series != null && !SE.has(s.series)) push(`plantão ${s.id}: série inexistente`); if (s.template != null && s.template !== '' && !T.has(s.template)) push(`plantão ${s.id}: modelo inexistente`);
     if (typeof s.title !== 'string' || !s.title.trim() || s.title.length > 160) push(`plantão ${s.id}: título ausente ou longo demais`); if (!Number.isInteger(s.minutes) || s.minutes <= 0) push(`plantão ${s.id}: duração inválida`);
     if (!optStr(s.note, 4000) || !optStr(s.ext_uid, 300) || !optIso(s.deleted_at) || !optIso(s.updated_at) || !optIso(s.imported_at) || !optBool(s.sample)) push(`plantão ${s.id}: campos auxiliares inválidos`);
+    if (!optColor(s.color_override)) push(`plantão ${s.id}: cor fora da paleta`);
   }
   return errs;
 }

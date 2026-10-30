@@ -1,7 +1,7 @@
 /* codecs.js — portabilidade do Meus Plantões (SPEC §3): CSV da escala (formato documentado do Plantãozinho), CSV com ganhos,
    ICS (exportar/importar), backup JSON verificado por SHA-256. Funções puras sobre o conjunto {places, templates, series, shifts};
    nada aqui grava — a prévia decide e o app aplica. Testado em node:test. */
-import { OFFSET, OFFSET_MIN, TZ, isDateKey, isTimeHM, isIsoLocal, minutesOf, parseDecimalCents, decimalTxt, safeCents, ruleTxtFor, dm, dmy, brl, normTitle, dupKeyIcs, uid, validateDataset, SCHEMA_VERSION, pad } from './core.js';
+import { OFFSET, OFFSET_MIN, TZ, isDateKey, isTimeHM, isIsoLocal, minutesOf, parseDecimalCents, decimalTxt, safeCents, ruleTxtFor, dm, dmy, brl, normTitle, dupKeyIcs, uid, validateDataset, SCHEMA_VERSION, pad, isColorKey, effectiveColor } from './core.js';
 
 /* ---------- CSV ---------- */
 /* M4: células de texto que começam com = + - @ (ou tab/CR) ganham apóstrofo — planilhas não as executam como fórmula */
@@ -24,7 +24,7 @@ export function csvParse(text) {
   return rows.filter(r => r.some(x => x.trim() !== ''));
 }
 const H = { /* cabeçalhos aceitos na importação (sem acento, minúsculas) */
-  id: ['id'], title: ['title', 'titulo', 'nome', 'plantao', 'descricao'], place: ['place', 'local', 'hospital', 'unidade'], color: ['color', 'cor'],
+  id: ['id'], title: ['title', 'titulo', 'nome', 'plantao', 'descricao'], place: ['place', 'local', 'hospital', 'unidade'], color: ['color', 'cor'], coloro: ['color_override', 'cor_individual', 'cor_do_plantao'] /* R7: cor individual explícita (G-R7-01) */,
   start: ['start_date', 'start', 'inicio', 'data_inicio', 'comeca', 'dtstart'], end: ['end_date', 'end', 'fim', 'data_fim', 'termina', 'dtend'],
   value: ['value', 'valor', 'amount', 'preco'], notes: ['notes', 'obs', 'observacoes', 'observacao', 'nota'], expected: ['expected_on', 'previsto', 'previsao', 'recebimento_previsto'], paid: ['paid_at', 'recebido_em', 'pago_em', 'recebido'],
 };
@@ -54,17 +54,22 @@ export function zonedToUtc(y, mo, d, h, mi, tz) {
 }
 /* instante (ms UTC) → texto ISO local com offset fixo */
 export function localIso(ms) { const d = new Date(ms + OFFSET_MIN * 60000); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00${OFFSET}`; }
-export const CSV_HEADER = ['id', 'title', 'place', 'color', 'start_date', 'end_date', 'value', 'notes'];
-export const CSV_HEADER_GANHOS = ['id', 'title', 'place', 'start_date', 'end_date', 'hours', 'value', 'expected_on', 'paid_at', 'status', 'rule'];
-const PALETTE_HEX = { w1: '#34C759', w2: '#2FA4C0', w3: '#AF52DE', w4: '#FF9500', w5: '#E0395F', w6: '#007AFF', w7: '#FFCC00', w8: '#5856D6', w9: '#00C7BE', w10: '#A2845E' };
+/* R7 (G-R7-01): as 8 colunas documentadas do Plantãozinho + `color_override` aditiva. `color` continua a cor EFETIVA em hex (o que o
+   Plantãozinho lê); `color_override` é a cor individual (chave da paleta ou vazio) — só ela distingue "override igual à cor do local". */
+export const CSV_HEADER = ['id', 'title', 'place', 'color', 'start_date', 'end_date', 'value', 'notes', 'color_override'];
+export const CSV_HEADER_GANHOS = ['id', 'title', 'place', 'start_date', 'end_date', 'hours', 'value', 'expected_on', 'paid_at', 'status', 'rule', 'color'];
+/* par claro/escuro de cada chave (igual a app.js PAL e design/tokens.json); exportação usa a variante clara */
+export const PALETTE_HEX = { w1: ['#34C759', '#30D158'], w2: ['#2FA4C0', '#40C8E0'], w3: ['#AF52DE', '#BF5AF2'], w4: ['#FF9500', '#FF9F0A'], w5: ['#E0395F', '#FF375F'], w6: ['#007AFF', '#0A84FF'], w7: ['#FFCC00', '#FFD60A'], w8: ['#5856D6', '#5E5CE6'], w9: ['#00C7BE', '#63E6E2'], w10: ['#A2845E', '#AC8E68'] };
+export function hexToColorKey(v) { v = String(v ?? '').trim().toUpperCase(); if (isColorKey(v.toLowerCase())) return v.toLowerCase(); if (!/^#[0-9A-F]{6}$/.test(v)) return null; return Object.keys(PALETTE_HEX).find(k => PALETTE_HEX[k].includes(v)) || null; }
+const effHex = (s, P) => { const k = effectiveColor(s, id => P[id]); return k ? PALETTE_HEX[k][0] : ''; };
 export function csvExport(data) {
   const P = Object.fromEntries(data.places.map(p => [p.id, p]));
-  return csvStringify(sortedShifts(data.shifts).map(s => [s.id, s.title, P[s.place]?.name || '', PALETTE_HEX[P[s.place]?.color] || '', s.start, s.end, decimalTxt(s.amount_cents), s.note || '']), CSV_HEADER);
+  return csvStringify(sortedShifts(data.shifts).map(s => [s.id, s.title, P[s.place]?.name || '', effHex(s, P), s.start, s.end, decimalTxt(s.amount_cents), s.note || '', isColorKey(s.color_override) ? s.color_override : '']), CSV_HEADER);
 }
 export function csvExportGanhos(data, today) {
   const P = Object.fromEntries(data.places.map(p => [p.id, p]));
   const status = s => s.paid_at ? 'recebido' : s.expected_on < today ? 'atrasado' : 'pendente';
-  return csvStringify(sortedShifts(data.shifts).map(s => [s.id, s.title, P[s.place]?.name || '', s.start, s.end, (s.minutes / 60).toFixed(2), decimalTxt(s.amount_cents), s.expected_on, s.paid_at || '', status(s), P[s.place] ? ruleTxtFor(P[s.place].rule) : '']), CSV_HEADER_GANHOS);
+  return csvStringify(sortedShifts(data.shifts).map(s => [s.id, s.title, P[s.place]?.name || '', s.start, s.end, (s.minutes / 60).toFixed(2), decimalTxt(s.amount_cents), s.expected_on, s.paid_at || '', status(s), P[s.place] ? ruleTxtFor(P[s.place].rule) : '', effHex(s, P)]), CSV_HEADER_GANHOS);
 }
 const sortedShifts = shifts => [...shifts].sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
 
@@ -92,8 +97,12 @@ export function csvPreview(text, data, opts) {
     if (ex && !isDateKey(ex)) return invalid.push({ line, reason: `previsão inválida: "${ex}"` });
     /* R6: sem local é válido (place: null); nome que não existe vira local novo só com confirmação */
     const k = placeName ? normTitle(placeName) : null, place = k ? byName.get(k) || byShort.get(k) : null; let placeId = place?.id ?? null;
-    if (k && !place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, color: cell('color'), count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; }
-    parsed.push({ id: uid(), title, place: placeId, start, end, minutes: minutesOf(start, end), amount_cents: cents, note: unFormula(cell('notes')), paid_at: paid || null, expected_on: ex || null, line, newPlace: k && !place ? placeName : null });
+    if (k && !place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, color: hexToColorKey(cell('color')), count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; } /* G-R7-03: a cor de um local novo semeia o LOCAL, nunca o plantão */
+    /* R7 cor individual: coluna explícita `color_override` manda (chave ou hex); sem ela, arquivo antigo: `color` ≠ cor do local existente vira override; sem local, `color` vira override */
+    const hasColor = col.coloro != null || !!cell('color'); let co = null;
+    if (col.coloro != null) co = hexToColorKey(cell('coloro'));
+    else if (cell('color')) { const ck = hexToColorKey(cell('color')); if (ck && (!k ? true : place ? ck !== place.color : false)) co = ck; }
+    parsed.push({ id: uid(), title, place: placeId, start, end, minutes: minutesOf(start, end), amount_cents: cents, note: unFormula(cell('notes')), paid_at: paid || null, expected_on: ex || null, color_override: co, hasColor, line, newPlace: k && !place ? placeName : null });
   });
   return finishPreview(classifyGroups(parsed, key3, s => byKey3.get(key3(s)) || null, () => undefined), invalid, newPlaces, { header: rows[0], total: rows.length - 1 });
 }
@@ -104,7 +113,7 @@ export function csvPreview(text, data, opts) {
    ordem (sameRow: valor inclusive zero, título, horário, local, observação inclusive vazia, previsão). Contra a base vale a política de
    mesclagem conflictChanges (valor zero / observação vazia = "não informado", não sobrescrevem). Recebimento nunca entra. Nenhum registro
    da base recebe mais de um resultado. */
-const sameRow = (a, b) => safeCents(a.amount_cents) === safeCents(b.amount_cents) && normTitle(a.title) === normTitle(b.title) && a.start === b.start && a.end === b.end && a.place === b.place && (a.note || '') === (b.note || '') && (a.expected_on || null) === (b.expected_on || null);
+const sameRow = (a, b) => safeCents(a.amount_cents) === safeCents(b.amount_cents) && normTitle(a.title) === normTitle(b.title) && a.start === b.start && a.end === b.end && a.place === b.place && (a.note || '') === (b.note || '') && (a.expected_on || null) === (b.expected_on || null) && (a.color_override || null) === (b.color_override || null); /* R7 (G-R7-02): cor entra na igualdade */
 function classifyGroups(parsed, identity, findBase, why) {
   const groups = new Map(); for (const s of parsed) { const k = identity(s); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); }
   const valid = [], invalid = [], dup = [], conflicts = [], used = new Map();
@@ -133,12 +142,14 @@ export function conflictChanges(ex, inc) {
   if (inc.start !== ex.start || inc.end !== ex.end) ch.push({ field: 'horário', from: `${ex.start.slice(11, 16)}–${ex.end.slice(11, 16)}`, to: `${inc.start.slice(11, 16)}–${inc.end.slice(11, 16)}` });
   if (inc.place && inc.place !== ex.place && !String(inc.place).startsWith('new:')) ch.push({ field: 'local', from: ex.place, to: inc.place });
   if (inc.note && inc.note !== (ex.note || '')) ch.push({ field: 'observação', from: ex.note || '', to: inc.note });
+  if (inc.hasColor && (inc.color_override || null) !== (ex.color_override || null)) ch.push({ field: 'cor', from: ex.color_override || 'do local', to: inc.color_override || 'do local' }); /* R7 (G-R7-02): só quando o arquivo traz cor */
   return ch;
 }
 /* aplica um conflito escolhido como "substituir pelo arquivo": nunca toca em paid_at (recebimento é decisão local) */
 export function applyConflict(ex, inc, now) {
   Object.assign(ex, { title: inc.title, start: inc.start, end: inc.end, minutes: inc.minutes, updated_at: now });
   if (safeCents(inc.amount_cents) > 0) ex.amount_cents = inc.amount_cents; if (inc.note) ex.note = inc.note; if (inc.place && !String(inc.place).startsWith('new:')) ex.place = inc.place; if (inc.expected_on) ex.expected_on = inc.expected_on; if (inc.ext_uid && !ex.ext_uid) ex.ext_uid = inc.ext_uid;
+  if (inc.hasColor) ex.color_override = isColorKey(inc.color_override) ? inc.color_override : null; /* R7: a cor do arquivo vale quando o arquivo a traz (inclusive "voltar ao local") */
 }
 /* ---------- ICS ---------- */
 const icsEsc = v => String(v ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
@@ -150,7 +161,8 @@ export const isoToUtcStamp = iso => { const d = new Date(Date.parse(iso)); retur
 export function icsExport(data, now = new Date(), opts = {}) {
   const values = opts.values !== false; const P = Object.fromEntries(data.places.map(p => [p.id, p])), stamp = isoToUtcStamp(now.toISOString());
   const ev = s => { const p = P[s.place]; const desc = (values ? [`Valor: ${brl(s.amount_cents)}`, `Previsto para ${dmy(s.expected_on)}`, s.paid_at ? `Recebido em ${dmy(s.paid_at)}` : 'Ainda não recebido'] : []).concat(s.note ? [`Obs.: ${s.note}`] : []).join('\n');
-    return ['BEGIN:VEVENT', `UID:${s.id}@meus-plantoes`, `DTSTAMP:${stamp}`, `DTSTART:${isoToUtcStamp(s.start)}`, `DTEND:${isoToUtcStamp(s.end)}`, `SUMMARY:${icsEsc(`${s.title} · ${p?.short || ''}`.trim())}`, `LOCATION:${icsEsc(p?.name || '')}`, desc ? `DESCRIPTION:${icsEsc(desc)}` : null, values ? `X-MP-AMOUNT-CENTS:${s.amount_cents}` : null, `X-MP-PLACE:${icsEsc(p?.name || '')}`, values ? `X-MP-EXPECTED:${s.expected_on}` : null, values && s.paid_at ? `X-MP-PAID:${s.paid_at}` : null, 'END:VEVENT'].filter(Boolean).map(fold).join('\r\n'); };
+    const eff = effectiveColor(s, id => P[id]); /* R7: X-MP-COLOR = cor efetiva (para quem só quer a cor); X-MP-COLOR-OVERRIDE = cor individual (G-R7-01) */
+    return ['BEGIN:VEVENT', `UID:${s.id}@meus-plantoes`, `DTSTAMP:${stamp}`, `DTSTART:${isoToUtcStamp(s.start)}`, `DTEND:${isoToUtcStamp(s.end)}`, `SUMMARY:${icsEsc(p ? `${s.title} · ${p.short}` : s.title)}` /* R7: sem local, só o título (antes sobrava " ·") */, `LOCATION:${icsEsc(p?.name || '')}`, desc ? `DESCRIPTION:${icsEsc(desc)}` : null, values ? `X-MP-AMOUNT-CENTS:${s.amount_cents}` : null, `X-MP-PLACE:${icsEsc(p?.name || '')}`, values ? `X-MP-EXPECTED:${s.expected_on}` : null, values && s.paid_at ? `X-MP-PAID:${s.paid_at}` : null, eff ? `X-MP-COLOR:${eff}` : null, isColorKey(s.color_override) ? `X-MP-COLOR-OVERRIDE:${s.color_override}` : null, 'END:VEVENT'].filter(Boolean).map(fold).join('\r\n'); };
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Meus Plantoes//PT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Meus Plantões', ...sortedShifts(data.shifts).map(ev), 'END:VCALENDAR'].join('\r\n') + '\r\n';
 }
 /* desdobra linhas, separa eventos; devolve [{props: {NAME: {params, value}}}] */
@@ -192,7 +204,8 @@ export function icsPreview(text, data) {
     const k = placeName ? normTitle(placeName) : null, place = k ? byName.get(k) || byShort.get(k) : null; let placeId = place?.id ?? null; /* R6: sem LOCATION = sem local */
     if (k && !place) { if (!newPlaces.has(k)) newPlaces.set(k, { name: placeName, count: 0, tempId: `new:${k}` }); placeId = newPlaces.get(k).tempId; }
     const centsRaw = g('X-MP-AMOUNT-CENTS'); const cents = /^\d{1,10}$/.test(centsRaw) ? (safeCents(+centsRaw) ?? 0) : 0; /* B1: inteiro seguro dentro do teto; fora disso = sem valor */
-    parsed.push({ id: uid(), ext_uid: uidRaw || null, title, place: placeId, start: st.iso, end: en.iso, minutes: minutesOf(st.iso, en.iso), amount_cents: cents, note: cents || own ? '' : (g('DESCRIPTION') ? g('DESCRIPTION').slice(0, 200) : '') /* DESCRIPTION vira observação só em evento externo sem valor; o nosso já existe aqui */, paid_at: isDateKey(g('X-MP-PAID')) ? g('X-MP-PAID') : null, expected_on: isDateKey(g('X-MP-EXPECTED')) ? g('X-MP-EXPECTED') : null, line: n, newPlace: place ? null : placeName, noAmount: !cents, tzUnknown: st.tzUnknown || en.tzUnknown || null });
+    const hasColor = !!own && e.props['X-MP-COLOR'] !== undefined; /* R7: só agendas do próprio app carregam cor; agenda externa nunca presume cor */
+    parsed.push({ id: uid(), ext_uid: uidRaw || null, title, place: placeId, start: st.iso, end: en.iso, minutes: minutesOf(st.iso, en.iso), amount_cents: cents, note: cents || own ? '' : (g('DESCRIPTION') ? g('DESCRIPTION').slice(0, 200) : '') /* DESCRIPTION vira observação só em evento externo sem valor; o nosso já existe aqui */, paid_at: isDateKey(g('X-MP-PAID')) ? g('X-MP-PAID') : null, expected_on: isDateKey(g('X-MP-EXPECTED')) ? g('X-MP-EXPECTED') : null, color_override: hasColor && isColorKey(g('X-MP-COLOR-OVERRIDE')) ? g('X-MP-COLOR-OVERRIDE') : null, hasColor, line: n, newPlace: place ? null : placeName, noAmount: !cents, tzUnknown: st.tzUnknown || en.tzUnknown || null });
   });
   /* identidade (SPEC §3): UID nosso → id; UID externo → ext_uid; sem UID → chave normalizada sem valor */
   const ownOf = s => (s.ext_uid || '').match(/^(.+)@meus-plantoes$/);
